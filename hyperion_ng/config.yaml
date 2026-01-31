@@ -1,6 +1,6 @@
-name: "Hyperion.NG (host network)"
+name: "Hyperion.NG"
 slug: "hyperion_ng"
-description: "Runs Hyperion.NG using sirfragalot/hyperion.ng with host networking."
+description: "Hyperion.NG with Home Assistant Ingress."
 version: "latest"
 url: "https://hub.docker.com/r/sirfragalot/hyperion.ng"
 
@@ -10,15 +10,23 @@ arch:
   - armv7
 
 image: "sirfragalot/hyperion.ng"
-
 host_network: true
 
+# Persist Hyperion config
 map:
   - type: addon_config
     read_only: false
     path: /root/.hyperion
 
+# Ingress (this is what makes it work inside HA)
+ingress: true
+ingress_port: 8090
+ingress_entry: "/"
+ingress_stream: true
+
+# Optional: show it in the left sidebar
+panel_title: "Hyperion"
+panel_icon: "mdi:led-strip-variant"
+
 startup: application
 boot: auto
-
-webui: "http://[HOST]:[PORT:8090]/"
