@@ -1,0 +1,3 @@
+name: "Beanie's Add-ons"
+url: "https://github.com/justbeanie/ha-pps"
+maintainer: "Beanie"
