@@ -1,3 +1,3 @@
 name: "Beanie's Add-ons"
-url: "https://github.com/justbeanie/ha-pps"
+url: "https://github.com/justbeanie/ha-addons"
 maintainer: "Beanie"
