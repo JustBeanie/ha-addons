@@ -1,7 +1,7 @@
 name: "Hyperion.NG (host network)"
 slug: "hyperion_ng"
 description: "Runs Hyperion.NG using sirfragalot/hyperion.ng with host networking."
-version: "1.0.0"
+version: "latest"
 url: "https://hub.docker.com/r/sirfragalot/hyperion.ng"
 
 arch:
