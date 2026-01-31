@@ -21,4 +21,4 @@ map:
 startup: application
 boot: auto
 
-webui: "http://localhost:8090/"
+webui: "http://[HOST]:[PORT:8090]/"
