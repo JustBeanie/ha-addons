@@ -1,7 +1,7 @@
 name: "Hyperion.NG (host network)"
 slug: "hyperion_ng"
 description: "Runs Hyperion.NG using sirfragalot/hyperion.ng with host networking."
-version: "latest"
+version: "1.0.0"
 url: "https://hub.docker.com/r/sirfragalot/hyperion.ng"
 
 arch:
@@ -11,10 +11,8 @@ arch:
 
 image: "sirfragalot/hyperion.ng"
 
-# The key requirement:
 host_network: true
 
-# Persist config where Hyperion expects it:
 map:
   - type: addon_config
     read_only: false
@@ -23,5 +21,4 @@ map:
 startup: application
 boot: auto
 
-# Optional: web UI link (works even on host networking)
 webui: "http://[HOST]:8090/"
