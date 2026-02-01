@@ -1,7 +1,7 @@
 name: "Hyperion.NG"
 slug: "hyperion_ng"
 description: "Runs Hyperion.NG using sirfragalot/hyperion.ng (host network, no ingress)."
-version: "2.1.1"
+version: "2.1.1_1"
 url: "https://hub.docker.com/r/sirfragalot/hyperion.ng"
 
 arch:
@@ -9,7 +9,7 @@ arch:
   - aarch64
   - armv7
 
-image: "sirfragalot/hyperion.ng"
+image: "sirfragalot/hyperion.ng:2.1.1"
 host_network: true
 
 # Expose UI + services (even with host networking, this documents the ports in HA)
