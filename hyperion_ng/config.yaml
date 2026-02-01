@@ -9,7 +9,7 @@ arch:
   - aarch64
   - armv7
 
-image: "sirfragalot/hyperion.ng:2.1.1"
+image: "sirfragalot/hyperion.ng"
 host_network: true
 
 # Expose UI + services (even with host networking, this documents the ports in HA)
