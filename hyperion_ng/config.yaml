@@ -1,7 +1,7 @@
 name: "Hyperion.NG"
 slug: "hyperion_ng"
 description: "Runs Hyperion.NG using sirfragalot/hyperion.ng (host network, no ingress)."
-version: "2.1.1"
+version: "2.2.1"
 url: "https://hub.docker.com/r/sirfragalot/hyperion.ng"
 
 arch:
@@ -11,6 +11,17 @@ arch:
 
 image: "sirfragalot/hyperion.ng"
 host_network: true
+
+environment:
+  QT_QPA_PLATFORM: offscreen
+  XDG_RUNTIME_DIR: /run
+
+devices:
+  - /dev/ttyUSB0:/dev/ttyUSB0
+  - /dev/ttyACM0:/dev/ttyACM0
+  - /dev/spidev0.0:/dev/spidev0.0
+  - /dev/mem:/dev/mem
+  - /dev/vcio:/dev/vcio
 
 # Expose UI + services (even with host networking, this documents the ports in HA)
 ports:
