@@ -1,0 +1,35 @@
+name: "HA Docs"
+slug: "ha_docs"
+description: "Serves a git repo of Markdown as a searchable MkDocs site behind HA ingress."
+version: "1.0.0"
+url: "https://github.com/JustBeanie/ha-addons"
+
+arch:
+  - amd64
+  - aarch64
+
+# No `image:` key on purpose - the Supervisor builds this locally on install,
+# so there is no ghcr publishing or CI to keep alive.
+
+init: false
+startup: application
+boot: auto
+
+ingress: true
+ingress_port: 8099
+panel_icon: "mdi:book-open-variant-outline"
+panel_title: "HA Docs"
+
+options:
+  repository: "https://github.com/JustBeanie/ha-automation-docs.git"
+  branch: "main"
+  poll_interval: 900
+  site_name: "HA Automation Docs"
+
+schema:
+  repository: "url"
+  branch: "str"
+  poll_interval: "int(60,86400)"
+  site_name: "str"
+  # Only needed if the docs repo is ever made private.
+  git_token: "password?"

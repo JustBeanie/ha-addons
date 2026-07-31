@@ -1,0 +1,62 @@
+site_name: !ENV [SITE_NAME, "HA Automation Docs"]
+
+# The docs repo is cloned here by run.sh. Keeping this config inside the add-on
+# rather than in the docs repo means the source repo needs no site scaffolding
+# at all - it stays exactly as GitHub renders it.
+docs_dir: /data/repo
+site_dir: /data/site
+
+# Flat .html files rather than directory URLs. Under ingress the add-on is
+# mounted at a random /api/hassio_ingress/<token>/ prefix, and directory URLs
+# make nginx issue trailing-slash redirects that drop that prefix.
+use_directory_urls: false
+
+theme:
+  name: material
+  # Material otherwise fetches Roboto from fonts.googleapis.com on every page
+  # load. This serves a LAN-only box, so use system fonts and stay offline.
+  font: false
+  features:
+    - navigation.sections
+    - navigation.top
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - toc.follow
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+
+markdown_extensions:
+  - tables
+  - attr_list
+  - md_in_html
+  - admonition
+  - toc:
+      permalink: true
+      toc_depth: 4
+      # GitHub-identical heading slugs. Without this the anchor links that
+      # target emoji headings (#-nightlight-script-id-desync) and em-dash
+      # headings (#dusk-and-away-rules--per-window) all break silently.
+      # See ghslug.py.
+      slugify: !!python/name:ghslug.slugify
+  - pymdownx.superfences
+  - pymdownx.details
+
+plugins:
+  - search
+
+# No `nav:` - MkDocs builds it from the file tree and uses README.md as the
+# index, so adding a doc to the source repo needs no change here.
+
+exclude_docs: |
+  .gitignore
+  .claude/
