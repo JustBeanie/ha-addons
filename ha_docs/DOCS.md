@@ -12,11 +12,21 @@ only ever pulls.
 
 | Option | Default | Meaning |
 |---|---|---|
-| `repository` | `https://github.com/JustBeanie/ha-automation-docs.git` | Repo to publish. |
+| `repository` | *(placeholder)* | Repo to publish. Set this first. |
 | `branch` | `main` | Branch to follow. |
 | `poll_interval` | `900` | Seconds between checks. 60–86400. |
-| `site_name` | `HA Automation Docs` | Title in the header and browser tab. |
+| `site_name` | `Docs` | Title in the header and browser tab. |
 | `git_token` | *(unset)* | Personal access token. Only needed for a private repo; never written to the log. |
+
+### Private repositories
+
+Create a [fine-grained personal access token](https://github.com/settings/tokens?type=beta)
+scoped to **only** the docs repository, with **Repository permissions → Contents:
+Read-only**. Paste it into `git_token`. Nothing else is needed — the add-on only
+ever reads.
+
+The token is used to build the clone URL and is never logged, but note it is
+stored in the add-on options like any other add-on secret.
 
 ## How it renders your Markdown
 
@@ -58,6 +68,10 @@ action: hassio.addon_restart
 data:
   addon: 3b317604_ha_docs
 ```
+
+The slug depends on where you installed it from — `local_ha_docs` for a local
+copy in `/addons`, or `<repo-id>_ha_docs` when installed from an add-on
+repository. The Supervisor shows it in the add-on page URL.
 
 ## Notes
 

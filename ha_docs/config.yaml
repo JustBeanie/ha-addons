@@ -21,10 +21,11 @@ panel_icon: "mdi:book-open-variant-outline"
 panel_title: "HA Docs"
 
 options:
-  repository: "https://github.com/JustBeanie/ha-automation-docs.git"
+  # Placeholder - set this to your own docs repo in the add-on configuration.
+  repository: "https://github.com/example/my-docs.git"
   branch: "main"
   poll_interval: 900
-  site_name: "HA Automation Docs"
+  site_name: "Docs"
 
 schema:
   repository: "url"
