@@ -1,0 +1,41 @@
+/*
+ * Styling for the `.diagram` blocks produced by the mermaid custom fence.
+ * Material styles its own `.mermaid` blocks; this file does the equivalent for
+ * the class we use instead. See overrides/assets/mermaid-init.js for why.
+ */
+
+.diagram {
+  display: block;
+  text-align: center;
+  margin: 1.2em 0;
+  /* Wide flowcharts scroll inside their own block rather than widening the
+     page. This works only because mermaid-init.js sets useMaxWidth: false -
+     with useMaxWidth on, mermaid shrinks the SVG to the container instead,
+     which under ingress (a narrow sidebar iframe) makes a large diagram
+     unreadable rather than scrollable. */
+  overflow-x: auto;
+}
+
+.diagram > svg {
+  max-width: none;
+  height: auto;
+}
+
+/* Before the runtime has run - and if it never does - the block is raw
+   diagram source. Make that legible rather than reflowed prose. */
+.diagram:not([data-processed]) {
+  text-align: left;
+  white-space: pre;
+  font-family: var(--md-code-font-family, monospace);
+  font-size: 0.75rem;
+  padding: 0.7em 1em;
+  border-radius: 0.2rem;
+  background-color: var(--md-code-bg-color);
+  color: var(--md-code-fg-color);
+}
+
+/* A parse error is loud on purpose: mkdocs build cannot catch one, so the
+   page is the only place it can surface. */
+.diagram--error {
+  border-left: 0.2rem solid var(--md-typeset-del-color, #f66);
+}

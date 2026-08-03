@@ -13,6 +13,10 @@ use_directory_urls: false
 
 theme:
   name: material
+  # Holds the vendored Mermaid runtime and its init script. MkDocs copies
+  # non-template files out of every theme directory into the built site, so
+  # anything under overrides/assets/ lands at /assets/ alongside Material's own.
+  custom_dir: /opt/ha_docs/overrides
   # Material otherwise fetches Roboto from fonts.googleapis.com on every page
   # load. This serves a LAN-only box, so use system fonts and stay offline.
   font: false
@@ -48,8 +52,31 @@ markdown_extensions:
       # headings (#dusk-and-away-rules--per-window) all break silently.
       # See ghslug.py.
       slugify: !!python/name:ghslug.slugify
-  - pymdownx.superfences
+  - pymdownx.superfences:
+      custom_fences:
+        # ```mermaid fences become <div class="diagram">, NOT the conventional
+        # <div class="mermaid">. Material's built-in diagram support keys off
+        # the "mermaid" class and, when it matches, fetches the runtime from
+        # cdn.jsdelivr.net - which this box cannot reach and should not try.
+        # Using a different class keeps that code path dormant and leaves
+        # rendering entirely to mermaid-init.js.
+        #
+        # fence_div_format (not fence_code_format) because Mermaid parses the
+        # element's own markup; an inner <code> wrapper ends up in the diagram
+        # source and breaks the parse.
+        - name: mermaid
+          class: diagram
+          format: !!python/name:pymdownx.superfences.fence_div_format
   - pymdownx.details
+
+# Load order matters: the UMD bundle assigns globalThis.mermaid synchronously,
+# and the init script expects it to already exist.
+extra_javascript:
+  - assets/mermaid.min.js
+  - assets/mermaid-init.js
+
+extra_css:
+  - assets/diagrams.css
 
 plugins:
   - search

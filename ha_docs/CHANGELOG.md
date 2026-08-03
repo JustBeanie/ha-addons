@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.1.0 - 2026-08-02
+
+- Renders ` ```mermaid ` fenced blocks as diagrams.
+- The Mermaid runtime is vendored into the image at build time, so no request
+  leaves the box at page load. Material's own diagram support fetches it from a
+  CDN, so it is deliberately bypassed rather than configured.
+- Diagrams follow the light/dark palette toggle, and a diagram that fails to
+  parse says so on the page instead of rendering as an empty block.
+- Wide diagrams render at full size and scroll inside their own block, rather
+  than shrinking to fit the narrow ingress sidebar.
+
 ## 1.0.0 - 2026-07-31
 
 Initial release.

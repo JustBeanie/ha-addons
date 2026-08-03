@@ -37,6 +37,18 @@ stays exactly as GitHub renders it.
 - Navigation is generated from the file tree; `README.md` becomes the index.
 - Relative `.md` links are rewritten automatically.
 - Full-text search is built in.
+- ` ```mermaid ` fenced blocks render as diagrams, the same as on GitHub.
+
+### Diagrams stay offline
+
+Material's built-in Mermaid support fetches the runtime from a CDN on every
+page load. This add-on vendors it into the image instead, and emits a different
+CSS class (`diagram`, not `mermaid`) so Material's version never activates.
+Nothing leaves the box.
+
+Because `mkdocs build` cannot validate diagram syntax, a block that fails to
+parse is rendered as a visible error with its source, rather than as an empty
+gap.
 
 ### GitHub-identical heading anchors
 

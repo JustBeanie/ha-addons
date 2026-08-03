@@ -1,0 +1,15 @@
+# ghslug.py and check_anchors.py are imported/run locally when testing a build,
+# which leaves bytecode caches next to the sources.
+__pycache__/
+*.pyc
+
+# The Mermaid runtime is downloaded into overrides/assets/ at image build time,
+# never committed - it is 3.5 MB of vendored third-party JS.
+ha_docs/overrides/assets/mermaid.min.js
+
+# OS / editor
+Thumbs.db
+desktop.ini
+.DS_Store
+.idea/
+.vscode/
