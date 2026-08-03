@@ -3,7 +3,8 @@
 Clones a git repository of Markdown, builds it into a static
 [MkDocs Material](https://squidfunk.github.io/mkdocs-material/) site, and serves
 it in the Home Assistant sidebar over ingress. It re-checks the repo on an
-interval and rebuilds only when the commit changes.
+interval and rebuilds when the commit changes — or when the add-on itself is
+upgraded, since a new version can change how the same Markdown renders.
 
 Git stays the source of truth. The add-on never writes to the repository — it
 only ever pulls.

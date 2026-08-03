@@ -14,7 +14,24 @@ export PYTHONPATH=/opt/ha_docs
 readonly CONFIG=/opt/ha_docs/mkdocs.yml
 readonly REPO_DIR=/data/repo
 readonly SITE_DIR=/data/site
-readonly SHA_FILE=/data/.last_sha
+readonly STAMP_FILE=/data/.last_build
+
+# The built site is cached against the commit it came from AND the builder that
+# produced it. Keying on the commit alone was a bug: /data survives an image
+# rebuild, so upgrading the add-on left the previous site in place and the new
+# mkdocs.yml was never used until the docs repo happened to get a commit. That
+# is how 1.1.0 shipped Mermaid support that did not appear.
+#
+# BUILDER_ID hashes everything in the image that can change the output -
+# mkdocs.yml, ghslug.py, and the theme overrides including the vendored Mermaid
+# runtime. Computed once at startup, not per poll, because that tree holds a
+# 3.5 MB JS file.
+#
+# Note the new filename: the old /data/.last_sha is deliberately not read, so
+# the first run after this upgrade always rebuilds.
+BUILDER_ID=$(find /opt/ha_docs -type f -print0 \
+    | xargs -0 md5sum | sort -k 2 | md5sum | cut -d' ' -f1)
+readonly BUILDER_ID
 
 # Build the URL git actually uses. Kept in a separate variable that is never
 # logged, so a token cannot leak into the add-on log.
@@ -58,18 +75,19 @@ refresh() {
         return 1
     fi
 
-    local sha previous
+    local sha stamp previous
     sha=$(git -C "${REPO_DIR}" rev-parse HEAD)
-    previous=$(cat "${SHA_FILE}" 2>/dev/null || true)
+    stamp="${sha} ${BUILDER_ID}"
+    previous=$(cat "${STAMP_FILE}" 2>/dev/null || true)
 
-    if [ "${sha}" = "${previous}" ] && [ -d "${SITE_DIR}" ]; then
+    if [ "${stamp}" = "${previous}" ] && [ -d "${SITE_DIR}" ]; then
         bashio::log.debug "No change (${sha:0:7})"
         return 0
     fi
 
-    bashio::log.info "Building docs at ${sha:0:7}"
+    bashio::log.info "Building docs at ${sha:0:7} (builder ${BUILDER_ID:0:7})"
     if build_site; then
-        echo "${sha}" > "${SHA_FILE}"
+        echo "${stamp}" > "${STAMP_FILE}"
         bashio::log.info "Site rebuilt"
     else
         bashio::log.error "mkdocs build failed - keeping the previous site"

@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.1.1 - 2026-08-02
+
+Fixes an upgrade that appears to do nothing.
+
+- The built site is now cached against the commit **and** the builder that
+  produced it. Keying on the commit alone meant that upgrading the add-on left
+  the previously built site in place — `/data` survives an image rebuild — so a
+  new `mkdocs.yml` was not used until the docs repo happened to get a commit.
+  That is why 1.1.0 shipped Mermaid support that did not appear.
+- The first run after this upgrade always rebuilds.
+
 ## 1.1.0 - 2026-08-02
 
 - Renders ` ```mermaid ` fenced blocks as diagrams.
