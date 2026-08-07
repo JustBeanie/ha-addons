@@ -74,9 +74,13 @@ markdown_extensions:
 extra_javascript:
   - assets/mermaid.min.js
   - assets/mermaid-init.js
+  # Highlights and notes. Independent of the two above - it only needs the DOM
+  # and the annotation service nginx proxies at /anno/.
+  - assets/annotate.js
 
 extra_css:
   - assets/diagrams.css
+  - assets/annotate.css
 
 plugins:
   - search

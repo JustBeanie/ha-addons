@@ -18,6 +18,7 @@ only ever pulls.
 | `poll_interval` | `900` | Seconds between checks. 60–86400. |
 | `site_name` | `Docs` | Title in the header and browser tab. |
 | `git_token` | *(unset)* | Personal access token. Only needed for a private repo; never written to the log. |
+| `todo_entity` | *(unset)* | To-do list that notes are mirrored onto, e.g. `todo.docs_review`. Leave empty to keep notes inside the docs site. |
 
 ### Private repositories
 
@@ -71,6 +72,53 @@ before trusting a large docs set:
 ```
 python scripts/check_anchors.py --source /path/to/docs-repo
 ```
+
+## Highlights and notes
+
+Select any text on a page to get a small toolbar: pick a colour to highlight it,
+or **Note** to highlight it and write something. Click an existing highlight to
+edit the note, change the colour, or delete it. The bookmark button in the header
+opens a review drawer listing everything you have flagged across every doc, with
+a link to each passage.
+
+Annotations are stored by the add-on in `/data/annotations.json`, not in the
+browser. That means the same set appears in the companion app and in a desktop
+browser, and survives an add-on upgrade, a reboot, or a cleared cache. It also
+means they are included in a Home Assistant backup.
+
+The docs repository is still never written to. Your notes are *about* the docs;
+they are not part of them.
+
+### Mirroring notes to a to-do list
+
+Set `todo_entity` to a to-do list — a [Local To-do](https://www.home-assistant.io/integrations/local_todo/)
+list called *Docs Review* works well — and every note is added to it as an item:
+the note is the summary, the page and the quoted text are the description.
+
+This is a one-way outbox, deliberately. An item is pushed once, when the note is
+first written. Editing the note afterwards does not update the item, and
+deleting the highlight does not remove it, because `todo.add_item` returns no
+handle to address the item by later. Tick items off in Home Assistant as you
+deal with them.
+
+If the list is unreachable the note is still saved — the failure is logged and
+nothing is lost.
+
+### When a doc changes underneath a highlight
+
+Annotations are anchored to the quoted text plus about forty characters either
+side, with whitespace normalised. Rewrapping a paragraph, reindenting it, or
+editing a nearby sentence therefore leaves the highlight where it was.
+
+When the quoted text is gone altogether, the annotation is **not** reattached to
+whatever looks closest. It is listed in the review drawer as orphaned, with the
+text you originally highlighted, and is not drawn on the page. A highlight
+silently sitting on the wrong sentence would be worse than one that admits it
+lost its place.
+
+Text inside Mermaid diagrams cannot be annotated: that subtree is replaced with
+a fresh SVG on every render and on every palette toggle, so no anchor in it
+would survive.
 
 ## Forcing an immediate sync
 

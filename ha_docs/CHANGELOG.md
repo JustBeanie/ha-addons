@@ -1,5 +1,24 @@
 # Changelog
 
+## 1.2.0 - 2026-08-06
+
+Highlights and notes, for marking things while reading and coming back to them.
+
+- Select any text to highlight it in one of four colours, and optionally attach
+  a note.
+- Annotations are stored by the add-on in `/data`, not in the browser, so the
+  same set appears in the companion app and on the desktop and survives an
+  add-on upgrade or a cleared cache. The docs repository is still never written
+  to.
+- A button in the header opens a review drawer listing everything flagged,
+  across every doc, with a link to each passage.
+- New `todo_entity` option: when set, every note is also added once to that
+  to-do list, so flagged items show up in the Home Assistant UI.
+- Annotations are anchored by quoted text and surrounding context, so editing a
+  doc and rewrapping its paragraphs does not move them. When the quoted text is
+  gone entirely, the annotation is reported as orphaned in the drawer rather
+  than reattached to whatever is nearest.
+
 ## 1.1.1 - 2026-08-02
 
 Fixes an upgrade that appears to do nothing.

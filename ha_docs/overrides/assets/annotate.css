@@ -1,0 +1,321 @@
+/*
+ * Styling for the annotation layer. See overrides/assets/annotate.js.
+ *
+ * Colours are rgba over whatever is behind them rather than solid fills, so a
+ * single set works in both palettes and a highlight that lands on a table row
+ * or an admonition does not paint over it. The alpha is raised in the slate
+ * scheme because a light wash over a dark background is invisible.
+ */
+
+/* --------------------------------------------------------------------------
+   Highlights
+   -------------------------------------------------------------------------- */
+
+/* Material styles bare <mark> for search hits, so these have to out-specify
+   it - hence the .md-typeset prefix throughout. */
+.md-typeset mark.anno {
+  background-color: transparent;
+  color: inherit;
+  padding: 0.05em 0;
+  border-radius: 0.15em;
+  cursor: pointer;
+  transition: box-shadow 200ms;
+}
+
+.md-typeset mark.anno--yellow { background-color: rgba(255, 214, 0, 0.38); }
+.md-typeset mark.anno--green  { background-color: rgba(0, 200, 83, 0.30); }
+.md-typeset mark.anno--blue   { background-color: rgba(41, 121, 255, 0.28); }
+.md-typeset mark.anno--pink   { background-color: rgba(245, 0, 87, 0.24); }
+
+[data-md-color-scheme="slate"] .md-typeset mark.anno--yellow { background-color: rgba(255, 214, 0, 0.30); }
+[data-md-color-scheme="slate"] .md-typeset mark.anno--green  { background-color: rgba(0, 230, 118, 0.26); }
+[data-md-color-scheme="slate"] .md-typeset mark.anno--blue   { background-color: rgba(68, 138, 255, 0.34); }
+[data-md-color-scheme="slate"] .md-typeset mark.anno--pink   { background-color: rgba(255, 64, 129, 0.30); }
+
+/* A highlight that carries a note reads differently from one that is just a
+   marker - otherwise there is no way to tell which ones to click. */
+.md-typeset mark.anno[data-anno-note] {
+  border-bottom: 2px solid currentColor;
+}
+
+.md-typeset mark.anno--flash {
+  box-shadow: 0 0 0 3px var(--md-accent-fg-color, #526cfe);
+}
+
+/* --------------------------------------------------------------------------
+   Shared chrome
+   -------------------------------------------------------------------------- */
+
+.anno-ui {
+  position: fixed;
+  z-index: 20;
+  font-size: 0.7rem;
+  line-height: 1.5;
+  color: var(--md-default-fg-color);
+  font-family: var(--md-text-font-family, inherit);
+}
+
+.anno-toolbar,
+.anno-popover,
+.anno-drawer {
+  background: var(--md-default-bg-color);
+  box-shadow: var(--md-shadow-z2, 0 0.2rem 0.5rem rgba(0, 0, 0, 0.3));
+  border-radius: 0.2rem;
+}
+
+.anno-btn {
+  cursor: pointer;
+  border: none;
+  border-radius: 0.15rem;
+  padding: 0.35em 0.8em;
+  font: inherit;
+  background: var(--md-default-fg-color--lightest);
+  color: var(--md-default-fg-color);
+}
+
+.anno-btn--primary {
+  background: var(--md-primary-fg-color);
+  color: var(--md-primary-bg-color);
+}
+
+.anno-btn--danger {
+  background: transparent;
+  color: var(--md-typeset-del-color, #f66);
+}
+
+/* --------------------------------------------------------------------------
+   Colour swatches
+   -------------------------------------------------------------------------- */
+
+.anno-swatches {
+  display: flex;
+  gap: 0.3rem;
+  align-items: center;
+}
+
+.anno-swatch {
+  width: 1.1rem;
+  height: 1.1rem;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+  padding: 0;
+}
+
+.anno-swatch--on {
+  border-color: var(--md-default-fg-color);
+}
+
+.anno-swatch--yellow { background-color: rgb(255, 214, 0); }
+.anno-swatch--green  { background-color: rgb(0, 200, 83); }
+.anno-swatch--blue   { background-color: rgb(41, 121, 255); }
+.anno-swatch--pink   { background-color: rgb(245, 0, 87); }
+
+/* --------------------------------------------------------------------------
+   Selection toolbar
+   -------------------------------------------------------------------------- */
+
+.anno-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.4rem 0.55rem;
+}
+
+.anno-toolbar__note {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  padding: 0 0.15rem;
+  border-left: 1px solid var(--md-default-fg-color--lightest);
+  padding-left: 0.6rem;
+}
+
+/* --------------------------------------------------------------------------
+   Note popover
+   -------------------------------------------------------------------------- */
+
+.anno-popover {
+  width: min(22rem, calc(100vw - 1rem));
+  padding: 0.7rem;
+}
+
+.anno-popover__quote {
+  font-style: italic;
+  color: var(--md-default-fg-color--light);
+  border-left: 2px solid var(--md-default-fg-color--lighter);
+  padding-left: 0.5rem;
+  margin-bottom: 0.5rem;
+  max-height: 4.5em;
+  overflow: hidden;
+}
+
+.anno-popover__note {
+  width: 100%;
+  box-sizing: border-box;
+  font: inherit;
+  color: inherit;
+  background: var(--md-code-bg-color);
+  border: 1px solid var(--md-default-fg-color--lightest);
+  border-radius: 0.15rem;
+  padding: 0.4rem;
+  resize: vertical;
+}
+
+.anno-popover__row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-top: 0.5rem;
+}
+
+/* Pushes Delete and Save to the right, swatches stay left. */
+.anno-popover__row .anno-swatches {
+  margin-right: auto;
+}
+
+/* --------------------------------------------------------------------------
+   Review drawer
+   -------------------------------------------------------------------------- */
+
+.anno-drawer {
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(24rem, 100vw);
+  border-radius: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.anno-drawer__head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.6rem 0.8rem;
+  background: var(--md-primary-fg-color);
+  color: var(--md-primary-bg-color);
+}
+
+.anno-drawer__head h2 {
+  margin: 0;
+  font-size: 0.8rem;
+  font-weight: 700;
+  flex: 1;
+}
+
+.anno-drawer__close {
+  border: none;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  padding: 0;
+  display: flex;
+}
+
+.anno-drawer__body {
+  overflow-y: auto;
+  padding: 0.6rem 0.8rem 1.2rem;
+}
+
+.anno-drawer__empty {
+  color: var(--md-default-fg-color--light);
+}
+
+.anno-group h3 {
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--md-default-fg-color--light);
+  margin: 0.9rem 0 0.4rem;
+}
+
+.anno-item {
+  display: block;
+  padding: 0.45rem 0.6rem;
+  margin-bottom: 0.35rem;
+  border-left: 3px solid transparent;
+  border-radius: 0.15rem;
+  background: var(--md-code-bg-color);
+  color: inherit;
+  text-decoration: none;
+}
+
+.anno-item--yellow { border-left-color: rgb(255, 214, 0); }
+.anno-item--green  { border-left-color: rgb(0, 200, 83); }
+.anno-item--blue   { border-left-color: rgb(41, 121, 255); }
+.anno-item--pink   { border-left-color: rgb(245, 0, 87); }
+
+.anno-item__quote {
+  color: var(--md-default-fg-color--light);
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.anno-item__note {
+  margin-top: 0.3rem;
+  font-weight: 600;
+}
+
+/* An orphan cannot be jumped to, so it must not look like the others. */
+.anno-item--orphan {
+  opacity: 0.75;
+  border-left-style: dashed;
+}
+
+.anno-item__flag {
+  margin-top: 0.3rem;
+  font-size: 0.62rem;
+  color: var(--md-typeset-del-color, #f66);
+}
+
+/* --------------------------------------------------------------------------
+   Header button
+   -------------------------------------------------------------------------- */
+
+.anno-open {
+  position: relative;
+  cursor: pointer;
+  border: none;
+  background: transparent;
+  color: currentColor;
+  display: flex;
+  align-items: center;
+}
+
+.anno-open__badge {
+  position: absolute;
+  top: 0;
+  right: 0;
+  min-width: 1rem;
+  padding: 0 0.15rem;
+  border-radius: 0.5rem;
+  background: var(--md-accent-fg-color, #526cfe);
+  color: var(--md-primary-bg-color, #fff);
+  font-size: 0.5rem;
+  line-height: 1rem;
+  text-align: center;
+}
+
+/* --------------------------------------------------------------------------
+   Toast
+   -------------------------------------------------------------------------- */
+
+.anno-toast {
+  left: 50%;
+  bottom: 1.2rem;
+  transform: translateX(-50%);
+  background: var(--md-default-fg-color);
+  color: var(--md-default-bg-color);
+  padding: 0.4rem 0.9rem;
+  border-radius: 1rem;
+  box-shadow: var(--md-shadow-z2, 0 0.2rem 0.5rem rgba(0, 0, 0, 0.3));
+}

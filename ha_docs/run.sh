@@ -8,6 +8,14 @@ INTERVAL=$(bashio::config 'poll_interval')
 
 export SITE_NAME
 SITE_NAME=$(bashio::config 'site_name')
+# Read by annotations.py. Empty means notes are stored but not mirrored to a
+# to-do list; SUPERVISOR_TOKEN is already in the environment via
+# homeassistant_api in config.yaml. Guarded with has_value rather than passing
+# a default, so an unset option cannot arrive as the string "null".
+export TODO_ENTITY=""
+if bashio::config.has_value 'todo_entity'; then
+    TODO_ENTITY=$(bashio::config 'todo_entity')
+fi
 # ghslug.py is imported by mkdocs.yml via !!python/name:
 export PYTHONPATH=/opt/ha_docs
 
@@ -106,11 +114,17 @@ if [ ! -d "${SITE_DIR}" ]; then
         > "${SITE_DIR}/index.html"
 fi
 
+# Highlights and notes live in /data, never in the docs repo - the add-on still
+# only ever pulls. Started before nginx so the first page load cannot race it.
+bashio::log.info "Starting the annotation store"
+python3 /opt/ha_docs/annotations.py &
+readonly ANNO_PID=$!
+
 bashio::log.info "Starting nginx on port 8099"
 nginx &
 readonly NGINX_PID=$!
 
-trap 'kill "${NGINX_PID}" 2>/dev/null; exit 0' SIGTERM SIGINT
+trap 'kill "${NGINX_PID}" "${ANNO_PID}" 2>/dev/null; exit 0' SIGTERM SIGINT
 
 while true; do
     sleep "${INTERVAL}" &

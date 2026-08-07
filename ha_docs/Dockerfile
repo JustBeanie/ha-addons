@@ -36,7 +36,7 @@ RUN apk add --no-cache --virtual .dl-deps curl \
         "https://cdn.jsdelivr.net/npm/mermaid@${MERMAID_VERSION}/dist/mermaid.min.js" \
     && apk del .dl-deps
 
-COPY mkdocs.yml ghslug.py /opt/ha_docs/
+COPY mkdocs.yml ghslug.py annotations.py /opt/ha_docs/
 # Merges with the directory the RUN above created - COPY does not clear the
 # destination - so the vendored mermaid.min.js survives. Keep this ordering:
 # the 3.5 MB download stays in a cached layer when only the overrides change.
