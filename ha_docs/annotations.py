@@ -124,6 +124,8 @@ class Store:
                 # to-do item.
                 record["created"] = previous.get("created", record["created"])
                 record["todo_pushed"] = previous.get("todo_pushed", False)
+                if "todo_summary" in previous:
+                    record["todo_summary"] = previous["todo_summary"]
                 for field in ("exact", "prefix", "suffix", "hint"):
                     if field not in record and field in previous:
                         record[field] = previous[field]
@@ -132,11 +134,17 @@ class Store:
             return dict(record)
 
     def delete(self, anno_id):
+        """Remove one annotation and hand it back, or None if it was not there.
+
+        Returns the record rather than a bool because the caller has to know
+        whether it ever reached the to-do list, and this is the last moment it
+        can be asked.
+        """
         with self._lock:
-            existed = self._records.pop(anno_id, None) is not None
-            if existed:
+            record = self._records.pop(anno_id, None)
+            if record is not None:
                 self._flush_locked()
-            return existed
+            return record
 
     def mark_pushed(self, anno_id):
         with self._lock:
@@ -144,6 +152,10 @@ class Store:
             if not record or record.get("todo_pushed"):
                 return
             record["todo_pushed"] = True
+            # The exact string the item was created with. Editing the note later
+            # changes the record but not the item, so completing it means keeping
+            # the handle rather than recomputing it from a note that has moved on.
+            record["todo_summary"] = todo_summary(record)
             self._flush_locked()
 
 
@@ -190,39 +202,37 @@ def clean(payload):
     return record
 
 
-def push_todo(record):
-    """Add one item to the configured to-do list.
+def todo_summary(record):
+    """The single line a note becomes on the to-do list.
 
-    One way, once, and only for annotations that carry a note - a bare
-    highlight is a reading aid, not a task. Editing the note later does not
-    update the item and deleting the annotation does not remove it: todo's
-    add_item returns no uid, so there is nothing to address afterwards. That
-    is documented in DOCS.md rather than worked around.
+    One definition, because an item is created by this string and later found
+    again by it. If the two ever drifted apart, completing an item would
+    silently miss.
+    """
+    return " ".join(record.get("note", "").split())[:TODO_SUMMARY_MAX]
+
+
+def call_todo(service, payload):
+    """Call one todo service on the core API. True if it landed.
+
+    Both callers run on a daemon thread off the request path, so an unreachable
+    or slow core API can only ever cost a log line - never a saved highlight or
+    a deleted one.
     """
     entity = os.environ.get("TODO_ENTITY", "").strip()
     token = os.environ.get("SUPERVISOR_TOKEN", "")
     if not entity:
-        return
+        return False
     if not token:
         log("warning", "todo_entity is set but SUPERVISOR_TOKEN is missing")
-        return
+        return False
 
-    where = record.get("title") or record.get("page", "")
-    summary = " ".join(record.get("note", "").split())[:TODO_SUMMARY_MAX]
-    if not summary:
-        return
-
-    body = json.dumps(
-        {
-            "entity_id": entity,
-            "item": summary,
-            "description": "{}\n\n> {}".format(where, record.get("exact", "")),
-        }
-    ).encode("utf-8")
+    body = dict(payload)
+    body["entity_id"] = entity
 
     request = urllib.request.Request(
-        "http://supervisor/core/api/services/todo/add_item",
-        data=body,
+        "http://supervisor/core/api/services/todo/" + service,
+        data=json.dumps(body).encode("utf-8"),
         method="POST",
         headers={
             "Authorization": "Bearer " + token,
@@ -234,10 +244,51 @@ def push_todo(record):
         with urllib.request.urlopen(request, timeout=10) as response:
             if response.status < 300:
                 return True
-            log("warning", "todo add_item returned {}".format(response.status))
+            log("warning", "todo {} returned {}".format(service, response.status))
     except (urllib.error.URLError, OSError) as err:
-        log("warning", "todo add_item failed: {}".format(err))
+        log("warning", "todo {} failed: {}".format(service, err))
     return False
+
+
+def push_todo(record):
+    """Add one item to the configured to-do list.
+
+    Once, and only for annotations that carry a note - a bare highlight is a
+    reading aid, not a task. Editing the note afterwards still does not update
+    the item; there is no uid to address it by, and rewriting an item someone
+    may already have started on would be worse than leaving it.
+    """
+    summary = todo_summary(record)
+    if not summary:
+        return False
+
+    where = record.get("title") or record.get("page", "")
+    return call_todo(
+        "add_item",
+        {
+            "item": summary,
+            "description": "{}\n\n> {}".format(where, record.get("exact", "")),
+        },
+    )
+
+
+def complete_todo(record):
+    """Tick off the item a note created, when its annotation is deleted.
+
+    update_item resolves `item` by uid or by summary, so the string sent at push
+    time is handle enough and no get_items round trip is needed. It comes off
+    the record (mark_pushed stored it) rather than off the current note, which
+    may have been edited since.
+
+    Only called for records that pushed - todo_pushed is the receipt. An item
+    that is already gone comes back 400 and is logged: deleting a note must
+    never fail over what the to-do list thinks.
+    """
+    summary = record.get("todo_summary") or todo_summary(record)
+    if not summary:
+        return False
+
+    return call_todo("update_item", {"item": summary, "status": "completed"})
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -311,7 +362,15 @@ class Handler(BaseHTTPRequestHandler):
             if not isinstance(anno_id, str) or not ID_RE.match(anno_id):
                 self._reply(400, {"ok": False, "error": "bad id"})
                 return
-            self._reply(200, {"ok": True, "deleted": STORE.delete(anno_id)})
+            removed = STORE.delete(anno_id)
+            # Same reasoning as the push above: the annotation is already gone
+            # from the store, and whether the to-do list agrees is not something
+            # the browser should be made to wait on.
+            if removed and removed.get("todo_pushed"):
+                threading.Thread(
+                    target=complete_todo, args=(removed,), daemon=True
+                ).start()
+            self._reply(200, {"ok": True, "deleted": removed is not None})
 
         else:
             self._reply(404, {"ok": False, "error": "no such route"})

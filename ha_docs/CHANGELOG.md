@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.3.0 - 2026-08-07
+
+Clearing notes, which 1.2.0 could only do one highlight at a time.
+
+- Every entry in the review drawer now has a delete button. This is the only way
+  to clear an **orphaned** annotation — it is not drawn on the page, so there was
+  no highlight to click — and it saves navigating to another doc to remove
+  something you can already see listed.
+- Deleting takes two taps: the first arms the button, the second removes the
+  annotation. There is no undo, and the drawer is scrolled with a thumb.
+- Deleting a note now also completes its item on the `todo_entity` list. In 1.2.0
+  the item was left behind, so the list only ever grew. Editing a note still does
+  not update its item.
+
 ## 1.2.0 - 2026-08-06
 
 Highlights and notes, for marking things while reading and coming back to them.

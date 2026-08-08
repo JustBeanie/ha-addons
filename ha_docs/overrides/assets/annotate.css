@@ -236,15 +236,25 @@
   margin: 0.9rem 0 0.4rem;
 }
 
+/* The entry and its delete button, side by side. */
+.anno-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.3rem;
+  margin-bottom: 0.35rem;
+}
+
 .anno-item {
   display: block;
   padding: 0.45rem 0.6rem;
-  margin-bottom: 0.35rem;
   border-left: 3px solid transparent;
   border-radius: 0.15rem;
   background: var(--md-code-bg-color);
   color: inherit;
   text-decoration: none;
+  /* min-width lets the quote clamp instead of pushing the button off the edge. */
+  flex: 1;
+  min-width: 0;
 }
 
 .anno-item--yellow { border-left-color: rgb(255, 214, 0); }
@@ -275,6 +285,38 @@
   margin-top: 0.3rem;
   font-size: 0.62rem;
   color: var(--md-typeset-del-color, #f66);
+}
+
+/* Deliberately quiet until you reach for it: this is the one control in the
+   drawer that destroys something. Sized for a thumb rather than the icon. */
+.anno-item__delete {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2rem;
+  min-height: 2rem;
+  padding: 0.25rem;
+  border: none;
+  border-radius: 0.15rem;
+  background: transparent;
+  color: var(--md-default-fg-color--light);
+  font: inherit;
+  font-size: 0.62rem;
+  cursor: pointer;
+}
+
+.anno-item__delete:hover,
+.anno-item__delete:focus-visible {
+  color: var(--md-typeset-del-color, #f66);
+}
+
+/* Armed: the next tap deletes, so it should not look like the resting state. */
+.anno-item__delete--armed {
+  color: var(--md-typeset-del-color, #f66);
+  background: var(--md-code-bg-color);
+  font-weight: 700;
+  white-space: nowrap;
 }
 
 /* --------------------------------------------------------------------------

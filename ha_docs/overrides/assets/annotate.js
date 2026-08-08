@@ -438,6 +438,8 @@
     "M19,6.41L17.59,5L12,10.59L6.41,5L5,6.41L10.59,12L5,17.59L6.41,19L12,13.41L17.59,19L19,17.59L13.41,12L19,6.41Z";
   var ICON_NOTE =
     "M14,10H19.5L14,4.5V10M5,3H15L21,9V19A2,2 0 0,1 19,21H5A2,2 0 0,1 3,19V5A2,2 0 0,1 5,3M5,12V14H19V12H5M5,16V18H14V16H5Z";
+  var ICON_TRASH =
+    "M19,4H15.5L14.5,3H9.5L8.5,4H5V6H19M6,19A2,2 0 0,0 8,21H16A2,2 0 0,0 18,19V7H6V19Z";
 
   // Falls back rather than trusting innerWidth outright: this runs inside the
   // ingress iframe, and a viewport that reports 0 would clamp every popup to a
@@ -718,9 +720,21 @@
     });
     updateBadge();
     renderDrawer();
-    api("delete", { id: record.id }).catch(function (err) {
-      console.error("[ha_docs] could not delete annotation", err);
-    });
+    api("delete", { id: record.id })
+      .then(function () {
+        // The add-on completes the to-do item on a thread it does not wait for,
+        // so this reports what was asked for rather than what came back. A
+        // completion that fails lands in the add-on log, not here.
+        flash(
+          record.todo_pushed
+            ? "Note deleted · to-do ticked off"
+            : "Note deleted"
+        );
+      })
+      .catch(function (err) {
+        console.error("[ha_docs] could not delete annotation", err);
+        flash("Could not delete - is the add-on still running?");
+      });
   }
 
   // --- review drawer ---------------------------------------------------------
@@ -755,6 +769,7 @@
 
   function toggleDrawer() {
     if (drawer) {
+      disarm();
       drawer.remove();
       drawer = null;
       return;
@@ -789,10 +804,77 @@
     renderDrawer();
   }
 
+  // ---------------------------------------------------------------------------
+  // Deleting from the drawer
+  //
+  // This is the only route to an orphan: it is not painted anywhere, so there is
+  // no highlight to click and open the popover on. Same for anything on a page
+  // you are not currently reading.
+  //
+  // Two taps, because the drawer is scrolled with a thumb and there is no undo.
+  // Only ever one armed button - arming a second disarms the first, so a stray
+  // tap further down the list cannot become the confirming tap for a row you
+  // stopped looking at.
+  // ---------------------------------------------------------------------------
+
+  var DELETE_LABEL = "Delete note";
+  var CONFIRM_LABEL = "Tap again to delete";
+
+  var armed = null;
+  var armedTimer = null;
+
+  function disarm() {
+    if (armedTimer) {
+      clearTimeout(armedTimer);
+      armedTimer = null;
+    }
+    if (armed) {
+      armed.classList.remove("anno-item__delete--armed");
+      armed.innerHTML = icon(ICON_TRASH);
+      armed.title = DELETE_LABEL;
+      armed.setAttribute("aria-label", DELETE_LABEL);
+      armed = null;
+    }
+  }
+
+  function deleteButton(record) {
+    var button = el("button", "anno-item__delete");
+    button.type = "button";
+    button.title = DELETE_LABEL;
+    button.setAttribute("aria-label", DELETE_LABEL);
+    button.innerHTML = icon(ICON_TRASH);
+
+    button.addEventListener("click", function (event) {
+      // The button's sibling is a link and a delegated handler on document
+      // watches for clicks on highlights; neither should see this.
+      event.preventDefault();
+      event.stopPropagation();
+
+      if (armed === button) {
+        disarm();
+        destroy(record);
+        return;
+      }
+
+      disarm();
+      armed = button;
+      button.classList.add("anno-item__delete--armed");
+      button.textContent = "Delete?";
+      button.title = CONFIRM_LABEL;
+      button.setAttribute("aria-label", CONFIRM_LABEL);
+      armedTimer = setTimeout(disarm, 3000);
+    });
+
+    return button;
+  }
+
   function renderDrawer() {
     if (!drawer) {
       return;
     }
+    // Every row is about to be rebuilt, so an armed button is a stale node and
+    // its timer would fire against nothing.
+    disarm();
     var body = drawer.querySelector(".anno-drawer__body");
     body.textContent = "";
 
@@ -841,6 +923,11 @@
           return (a.hint || 0) - (b.hint || 0);
         })
         .forEach(function (record) {
+          // The delete button cannot live inside the anchor - a button nested in
+          // a link is invalid, and the nesting swallows the click - so the row is
+          // a wrapper holding the two side by side.
+          var row = el("div", "anno-row");
+
           var item = el("a", "anno-item anno-item--" + record.color);
           item.href = BASE + page + "#anno-" + record.id;
           if (orphaned[record.id]) {
@@ -866,7 +953,10 @@
               jumpTo(record.id);
             });
           }
-          section.appendChild(item);
+
+          row.appendChild(item);
+          row.appendChild(deleteButton(record));
+          section.appendChild(row);
         });
 
       body.appendChild(section);

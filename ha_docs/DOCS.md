@@ -81,6 +81,10 @@ edit the note, change the colour, or delete it. The bookmark button in the heade
 opens a review drawer listing everything you have flagged across every doc, with
 a link to each passage.
 
+Each entry in the drawer has a delete button, which works whichever doc the
+annotation belongs to. It takes two taps — the first arms it, the second deletes —
+because there is no undo.
+
 Annotations are stored by the add-on in `/data/annotations.json`, not in the
 browser. That means the same set appears in the companion app and in a desktop
 browser, and survives an add-on upgrade, a reboot, or a cleared cache. It also
@@ -95,11 +99,13 @@ Set `todo_entity` to a to-do list — a [Local To-do](https://www.home-assistant
 list called *Docs Review* works well — and every note is added to it as an item:
 the note is the summary, the page and the quoted text are the description.
 
-This is a one-way outbox, deliberately. An item is pushed once, when the note is
-first written. Editing the note afterwards does not update the item, and
-deleting the highlight does not remove it, because `todo.add_item` returns no
-handle to address the item by later. Tick items off in Home Assistant as you
-deal with them.
+An item is pushed once, when the note is first written, and deleting the note
+completes it. Editing a note afterwards does **not** update its item: it may be
+one you have already started acting on, and quietly rewriting it would be worse
+than leaving it as written.
+
+You can still tick items off in Home Assistant as you deal with them — that has
+no effect on the highlight, which stays in the docs until you delete it.
 
 If the list is unreachable the note is still saved — the failure is logged and
 nothing is lost.
@@ -115,6 +121,10 @@ whatever looks closest. It is listed in the review drawer as orphaned, with the
 text you originally highlighted, and is not drawn on the page. A highlight
 silently sitting on the wrong sentence would be worse than one that admits it
 lost its place.
+
+Once an orphan has told you what you needed to know, delete it from the drawer.
+That is the only place it can be reached, since there is no highlight on any page
+to click.
 
 Text inside Mermaid diagrams cannot be annotated: that subtree is replaced with
 a fresh SVG on every render and on every palette toggle, so no anchor in it
