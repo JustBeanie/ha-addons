@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.3.1 - 2026-08-07
+
+Security documentation correction for private-repository credentials.
+
+- Clarifies that HA Docs never logs `git_token` or the authenticated clone URL;
+  its log only reports that authenticated access is in use.
+- Warns that Supervisor stores the token in add-on options and can return it to
+  authorized manager/admin clients, so configuration and status output must not
+  be pasted into chats or issues.
+- Documents least-privilege token scope, immediate rotation after exposure, and
+  HA-MCP's `redact_secrets` protection for status responses.
+
 ## 1.3.0 - 2026-08-07
 
 Clearing notes, which 1.2.0 could only do one highlight at a time.

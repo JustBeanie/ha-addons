@@ -17,7 +17,7 @@ only ever pulls.
 | `branch` | `main` | Branch to follow. |
 | `poll_interval` | `900` | Seconds between checks. 60–86400. |
 | `site_name` | `Docs` | Title in the header and browser tab. |
-| `git_token` | *(unset)* | Personal access token. Only needed for a private repo; never written to the log. |
+| `git_token` | *(unset)* | Personal access token. Only needed for a private repo. HA Docs never writes it to its log, but add-on configuration and status output containing it is sensitive. |
 | `todo_entity` | *(unset)* | To-do list that notes are mirrored onto, e.g. `todo.docs_review`. Leave empty to keep notes inside the docs site. |
 
 ### Private repositories
@@ -27,8 +27,24 @@ scoped to **only** the docs repository, with **Repository permissions → Conten
 Read-only**. Paste it into `git_token`. Nothing else is needed — the add-on only
 ever reads.
 
-The token is used to build the clone URL and is never logged, but note it is
-stored in the add-on options like any other add-on secret.
+HA Docs uses the token to build the clone URL in memory. It logs only **Using
+authenticated access** and never logs the token or authenticated clone URL.
+
+The token is still stored in Supervisor options. Home Assistant intentionally
+allows authorized manager/admin callers to retrieve full add-on options,
+including password and API-key fields. Masking the field in the configuration UI
+does not remove it from those API responses. See the
+[Supervisor API documentation](https://developers.home-assistant.io/docs/api/supervisor/endpoints/#addons).
+
+Treat all add-on configuration and status output as sensitive: never paste it
+into a chat, issue, or other public report. If such output is exposed, revoke and
+rotate the token immediately.
+
+If you inspect Home Assistant through HA-MCP, enable its **Redact secrets**
+feature (`redact_secrets: true`) and restart HA-MCP before requesting detailed
+add-on status. A password option that is set should then appear as
+`<redacted: set>`. Redaction protects HA-MCP responses; it does not make the
+underlying Supervisor option inaccessible to legitimately privileged callers.
 
 ## How it renders your Markdown
 
