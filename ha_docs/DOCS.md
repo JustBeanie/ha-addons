@@ -20,7 +20,10 @@ only ever pulls.
 | `git_token` | *(unset)* | Personal access token. Only needed for a private repo; never written to the log. |
 | `todo_entity` | *(unset)* | To-do list that notes are mirrored onto, e.g. `todo.docs_review`. Leave empty to keep notes inside the docs site. |
 | `report_doc_link_repairs` | `true` | Raise a Home Assistant Repairs issue for each invalid automation/script Docs link. Requires Spook. Never changes entity descriptions. |
-| `log_level` | `info` | Add-on verbosity: `trace`, `debug`, `info`, `warning`, or `error`. |
+| `repair_scan_on_start` | `true` | Start the report-only Docs-link Repair scan in the background when HA Docs starts. |
+| `repair_scan_concurrency` | `4` | Concurrent configuration reads during the scan. Range: 1–8; Repair actions remain serial. |
+| `repair_progress_interval` | `25` | Entities between visible scan-progress log records. Range: 1–100. |
+| `log_level` | `info` | Applies to all HA Docs components: `trace`, `debug`, `info`, `warning`, or `error`. |
 
 ### Documentation-link repair reporting (Spook required)
 
@@ -30,7 +33,13 @@ Home Assistant Repairs dashboard. It only reports the entity, failure, and sugge
 it never changes an automation or script description. Each issue includes the link it found and the
 exact marker or URL change to make when the target is unambiguous.
 
-Every scan logs its start, progress every 25 entities, each raised repair, and a final healthy/raised/failure summary at `info` level. Set `log_level` to `debug` for additional refresh and build detail.
+HA Docs starts ingress before it fetches or scans, so the previously built site remains usable while a refresh is in progress. A first-ever start serves a small “initial sync” page until its first successful build.
+
+Every HA Docs log line includes a local ISO-8601 timestamp and a level. At `info`, the scanner reports start, periodic progress, Repairs raised, and its healthy/raised/cleared/failure summary. `debug` adds per-entity decisions; `trace` adds token-safe API request metadata. No level logs Supervisor tokens or full entity descriptions.
+
+### Repeatable live Repair test fixture
+
+`script.ha_docs_repair_test` is a disabled, no-op script reserved for validating this report-only integration. Give it a valid `📖 Docs:` link to verify that a prior Repair clears; temporarily use a `Docs:` marker, a nonexistent Markdown path, or a nonexistent anchor to verify that Spook raises a clear, actionable Repair. Restore its canonical link afterwards. HA Docs never changes the fixture description.
 
 ### Private repositories
 

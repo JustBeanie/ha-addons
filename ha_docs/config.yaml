@@ -1,7 +1,7 @@
 name: "HA Docs"
 slug: "ha_docs"
 description: "Serves a git repo of Markdown as a searchable MkDocs site behind HA ingress."
-version: "1.6.2"
+version: "1.7.0"
 url: "https://github.com/JustBeanie/ha-addons"
 
 arch:
@@ -32,6 +32,9 @@ options:
   site_name: "Docs"
   todo_entity: ""
   report_doc_link_repairs: true
+  repair_scan_on_start: true
+  repair_scan_concurrency: 4
+  repair_progress_interval: 25
   log_level: "info"
 
 schema:
@@ -47,6 +50,11 @@ schema:
   # Requires the Spook integration. Raise a Repairs issue for every docs-link
   # candidate; descriptions are never changed automatically.
   report_doc_link_repairs: "bool"
-  # Set debug to see add-on refresh/build detail; the Docs-link scan always
-  # emits start, progress, raised-repair, and summary lines at info level.
+  # Run the report-only Docs-link Repair scan in the background at app start.
+  repair_scan_on_start: "bool"
+  # Bounded parallel reads from the HA config API. Repair actions remain serial.
+  repair_scan_concurrency: "int(1,8)"
+  # Emit a visible scan progress line after this many entities are read.
+  repair_progress_interval: "int(1,100)"
+  # Applies to every HA Docs component, including the Python link scanner.
   log_level: "list(trace|debug|info|warning|error)"

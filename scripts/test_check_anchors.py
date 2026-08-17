@@ -2,9 +2,13 @@
 
 import copy
 import importlib.util
+import io
 import pathlib
+import re
 import sys
 import tempfile
+import threading
+import time
 import unittest
 
 
@@ -163,6 +167,72 @@ class CheckAnchorsTests(unittest.TestCase):
         failures = CHECK.check_ha(self.repo, api, BASE, True, self.audit)
         self.assertEqual(failures, 1)
         self.assertEqual(api.writes, [])
+
+    def test_repair_content_explains_broken_link_and_report_only_behavior(self):
+        failures, api = self.reconcile({"script.missing": self.config(url=f"{BASE}/docs/missing.md#nope")})
+        self.assertEqual(failures, 0)
+        description = api.services[0][2]["description"]
+        self.assertIn("Problem: broken or ambiguous Docs target.", description)
+        self.assertIn("Manually add exactly one valid", description)
+        self.assertIn("did not modify the entity", description)
+        self.assertEqual(api.writes, [])
+
+    def test_info_logs_are_timestamped_and_include_scan_lifecycle(self):
+        stream = io.StringIO()
+        CHECK.configure_logging("info", stream)
+        try:
+            failures, _ = self.reconcile({"script.valid": self.config()})
+        finally:
+            CHECK.configure_logging()
+        self.assertEqual(failures, 0)
+        output = stream.getvalue()
+        self.assertRegex(output, r"^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d[+-]\d\d:\d\d \[INFO\] \[ha\] Docs-link Repair scan started", re.MULTILINE)
+        self.assertIn("Docs-link scan progress", output)
+        self.assertIn("Docs-link Repair scan complete", output)
+
+    def test_debug_logs_include_per_entity_decisions_but_info_does_not(self):
+        info_stream = io.StringIO()
+        CHECK.configure_logging("info", info_stream)
+        self.reconcile({"script.valid": self.config()})
+        debug_stream = io.StringIO()
+        CHECK.configure_logging("debug", debug_stream)
+        try:
+            self.reconcile({"script.valid": self.config()})
+        finally:
+            CHECK.configure_logging()
+        self.assertNotIn("Docs link valid", info_stream.getvalue())
+        self.assertIn("Docs link valid: entity=script.valid", debug_stream.getvalue())
+
+    def test_config_reads_respect_bounded_concurrency(self):
+        configs = {f"script.test_{index}": self.config() for index in range(8)}
+        api = FakeApi(configs)
+        original_get = api.get_config
+        lock = threading.Lock()
+        current = maximum = 0
+
+        def slow_get(entity_id):
+            nonlocal current, maximum
+            with lock:
+                current += 1
+                maximum = max(maximum, current)
+            try:
+                time.sleep(0.02)
+                return original_get(entity_id)
+            finally:
+                with lock:
+                    current -= 1
+
+        api.get_config = slow_get
+        failures = CHECK.check_ha(self.repo, api, BASE, True, self.audit, concurrency=3, progress_interval=2)
+        self.assertEqual(failures, 0)
+        self.assertGreater(maximum, 1)
+        self.assertLessEqual(maximum, 3)
+
+    def test_runner_starts_ingress_before_background_refresh_worker(self):
+        runner = (ROOT / "ha_docs" / "run.sh").read_text(encoding="utf-8")
+        self.assertLess(runner.index("nginx &"), runner.index("refresh_worker &"))
+        self.assertIn("Initial documentation sync is in progress", runner)
+        self.assertIn("wait \"${WORKER_PID}\"", runner)
 
     def test_issue_ids_are_stable_and_entity_specific(self):
         self.assertEqual(CHECK.repair_issue_id("script.Wake-Up Stage 1"), "ha_docs_link_script_wake_up_stage_1")

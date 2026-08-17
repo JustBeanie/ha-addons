@@ -20,6 +20,7 @@ The docs repository is never touched. DOCS.md promises the add-on only ever
 pulls, and that stays true.
 """
 
+import datetime as dt
 import json
 import os
 import re
@@ -58,7 +59,8 @@ TODO_SUMMARY_MAX = 240
 
 
 def log(level, message):
-    sys.stderr.write("[annotations] {}: {}\n".format(level, message))
+    timestamp = dt.datetime.now().astimezone().isoformat(timespec="seconds")
+    sys.stderr.write("{} [{}] [annotations] {}\n".format(timestamp, level.upper(), message))
     sys.stderr.flush()
 
 

@@ -6,9 +6,42 @@ REPO=$(bashio::config 'repository')
 BRANCH=$(bashio::config 'branch')
 INTERVAL=$(bashio::config 'poll_interval')
 REPORT_DOC_LINK_REPAIRS=$(bashio::config 'report_doc_link_repairs')
+REPAIR_SCAN_ON_START=$(bashio::config 'repair_scan_on_start')
+REPAIR_SCAN_CONCURRENCY=$(bashio::config 'repair_scan_concurrency')
+REPAIR_PROGRESS_INTERVAL=$(bashio::config 'repair_progress_interval')
 LOG_LEVEL=$(bashio::config 'log_level')
 
-bashio::log.level "${LOG_LEVEL}"
+case "${LOG_LEVEL}" in
+    trace) LOG_THRESHOLD=0 ;;
+    debug) LOG_THRESHOLD=1 ;;
+    info) LOG_THRESHOLD=2 ;;
+    warning) LOG_THRESHOLD=3 ;;
+    error) LOG_THRESHOLD=4 ;;
+    *) LOG_THRESHOLD=2 ;;
+esac
+
+log() {
+    local level=$1 weight message
+    shift
+    case "${level}" in
+        TRACE) weight=0 ;;
+        DEBUG) weight=1 ;;
+        INFO) weight=2 ;;
+        WARNING) weight=3 ;;
+        ERROR) weight=4 ;;
+        *) return 2 ;;
+    esac
+    if [ "${weight}" -ge "${LOG_THRESHOLD}" ]; then
+        message="$*"
+        printf '%s [%s] %s\n' "$(date '+%Y-%m-%dT%H:%M:%S%z')" "${level}" "${message}" >&2
+    fi
+}
+
+log_trace() { log TRACE "$@"; }
+log_debug() { log DEBUG "$@"; }
+log_info() { log INFO "$@"; }
+log_warning() { log WARNING "$@"; }
+log_error() { log ERROR "$@"; }
 
 export SITE_NAME
 SITE_NAME=$(bashio::config 'site_name')
@@ -51,7 +84,7 @@ readonly BUILDER_ID
 AUTH_REPO="${REPO}"
 if bashio::config.has_value 'git_token'; then
     AUTH_REPO="${REPO/https:\/\//https://$(bashio::config 'git_token')@}"
-    bashio::log.info "Using authenticated access for the docs repository"
+    log_info "Using authenticated access for the docs repository"
 fi
 
 sync_repo() {
@@ -83,7 +116,7 @@ build_site() {
 
 reconcile_ha_docs_links() {
     if [ "${REPORT_DOC_LINK_REPAIRS}" != "true" ]; then
-        bashio::log.info "HA documentation-link repair reporting is disabled"
+        log_info "HA documentation-link Repair reporting is disabled"
         return 0
     fi
 
@@ -98,32 +131,33 @@ reconcile_ha_docs_links() {
             local base="${REPO}/blob/${BRANCH}"
             ;;
         *)
-            bashio::log.warning "HA Docs-link reconciliation requires a GitHub repository URL"
+            log_warning "HA Docs-link Repair scan requires a GitHub repository URL"
             return 1
             ;;
     esac
 
     HA_DOC_LINK_AUDIT="${DOC_LINK_AUDIT}" \
         python3 /opt/ha_docs/check_anchors.py --ha --report \
+        --log-level "${LOG_LEVEL}" \
+        --scan-concurrency "${REPAIR_SCAN_CONCURRENCY}" \
+        --progress-interval "${REPAIR_PROGRESS_INTERVAL}" \
         --github-base "${base}" "${REPO_DIR}"
 }
 
 # One pull + conditional rebuild. Returns non-zero only on hard failure.
 refresh() {
+    local reason=$1 started_at=$SECONDS
+    log_info "Refresh worker started: reason=${reason}"
     if ! sync_repo; then
-        bashio::log.warning "git sync failed - keeping the current site"
+        log_warning "Repository sync failed; continuing to serve the current site"
         return 1
     fi
 
     # This runs on add-on start and after every successful pull, including an
     # unchanged commit. It validates live descriptions against the freshly
     # pulled source before a static build is published.
-    if ! python3 /opt/ha_docs/check_anchors.py --source "${REPO_DIR}"; then
-        bashio::log.error "Source anchor check failed - keeping the current site"
-        return 1
-    fi
-    if ! reconcile_ha_docs_links; then
-        bashio::log.error "HA documentation-link repair reporting failed"
+    if ! python3 /opt/ha_docs/check_anchors.py --source --log-level "${LOG_LEVEL}" "${REPO_DIR}"; then
+        log_error "Source anchor check failed; continuing to serve the current site"
         return 1
     fi
 
@@ -133,45 +167,63 @@ refresh() {
     previous=$(cat "${STAMP_FILE}" 2>/dev/null || true)
 
     if [ "${stamp}" = "${previous}" ] && [ -d "${SITE_DIR}" ]; then
-        bashio::log.debug "No change (${sha:0:7})"
-        return 0
-    fi
-
-    bashio::log.info "Building docs at ${sha:0:7} (builder ${BUILDER_ID:0:7})"
-    if build_site; then
-        echo "${stamp}" > "${STAMP_FILE}"
-        bashio::log.info "Site rebuilt"
+        log_debug "Docs source unchanged: commit=${sha:0:7}"
     else
-        bashio::log.error "mkdocs build failed - keeping the previous site"
-        return 1
+        log_info "Building docs: commit=${sha:0:7} builder=${BUILDER_ID:0:7}"
+        if build_site; then
+            echo "${stamp}" > "${STAMP_FILE}"
+            log_info "Docs site published: commit=${sha:0:7}"
+        else
+            log_error "MkDocs build failed; continuing to serve the previous site"
+            return 1
+        fi
     fi
+
+    if [ "${reason}" != "startup-skipped" ]; then
+        if ! reconcile_ha_docs_links; then
+            log_error "HA Docs-link Repair scan completed with failures"
+            return 1
+        fi
+    else
+        log_info "HA Docs-link Repair scan skipped by repair_scan_on_start=false"
+    fi
+    log_info "Refresh worker completed: reason=${reason} elapsed_seconds=$((SECONDS - started_at))"
 }
-
-bashio::log.info "Docs source: ${REPO} (${BRANCH}), polling every ${INTERVAL}s"
-
-refresh || bashio::log.warning "Initial refresh failed"
 
 # nginx needs something to serve even if the very first build failed.
 if [ ! -d "${SITE_DIR}" ]; then
     mkdir -p "${SITE_DIR}"
-    echo "<h1>HA Docs</h1><p>No site built yet - check the add-on log.</p>" \
+    echo "<h1>HA Docs</h1><p>Initial documentation sync is in progress. Check the app log for status.</p>" \
         > "${SITE_DIR}/index.html"
 fi
 
 # Highlights and notes live in /data, never in the docs repo - the add-on still
-# only ever pulls. Started before nginx so the first page load cannot race it.
-bashio::log.info "Starting the annotation store"
+# only ever pulls. Start all ingress services before network and API work.
+log_info "HA Docs starting: source=${REPO} branch=${BRANCH} poll_interval=${INTERVAL}s"
+log_info "Starting annotation store"
 python3 /opt/ha_docs/annotations.py &
 readonly ANNO_PID=$!
 
-bashio::log.info "Starting nginx on port 8099"
+log_info "Starting nginx on port 8099"
 nginx &
 readonly NGINX_PID=$!
 
-trap 'kill "${NGINX_PID}" "${ANNO_PID}" 2>/dev/null; exit 0' SIGTERM SIGINT
+refresh_worker() {
+    local initial_reason=startup
+    if [ "${REPAIR_SCAN_ON_START}" != "true" ]; then
+        initial_reason=startup-skipped
+    fi
+    refresh "${initial_reason}" || log_warning "Refresh worker failed: reason=${initial_reason}"
+    while true; do
+        sleep "${INTERVAL}"
+        refresh poll || log_warning "Refresh worker failed: reason=poll"
+    done
+}
 
-while true; do
-    sleep "${INTERVAL}" &
-    wait $!
-    refresh || true
-done
+log_info "Starting background refresh and Docs-link Repair worker"
+refresh_worker &
+readonly WORKER_PID=$!
+
+trap 'kill "${WORKER_PID}" "${NGINX_PID}" "${ANNO_PID}" 2>/dev/null; exit 0' SIGTERM SIGINT
+
+wait "${WORKER_PID}"

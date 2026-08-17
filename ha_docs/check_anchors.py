@@ -27,15 +27,46 @@ import copy
 import datetime as dt
 import hashlib
 import json
+import logging
 import os
 import pathlib
 import re
 import sys
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import urllib.error
 import urllib.parse
 import urllib.request
 
 import ghslug
+
+
+TRACE = 5
+logging.addLevelName(TRACE, "TRACE")
+LOGGER = logging.getLogger("ha_docs.check_anchors")
+
+
+class LocalIsoFormatter(logging.Formatter):
+    """Render every scanner message with the HA host's local ISO timestamp."""
+
+    def formatTime(self, record, datefmt=None):  # noqa: N802 - logging API name
+        return dt.datetime.fromtimestamp(record.created).astimezone().isoformat(timespec="seconds")
+
+
+def configure_logging(level: str = "info", stream=None) -> None:
+    """Configure a compact, token-safe CLI logger for every scanner mode."""
+    value = {"trace": TRACE, "debug": logging.DEBUG, "info": logging.INFO,
+             "warning": logging.WARNING, "error": logging.ERROR}.get(level.casefold())
+    if value is None:
+        raise ValueError(f"unsupported log level: {level}")
+    handler = logging.StreamHandler(stream)
+    handler.setFormatter(LocalIsoFormatter("%(asctime)s [%(levelname)s] %(message)s"))
+    LOGGER.handlers.clear()
+    LOGGER.addHandler(handler)
+    LOGGER.setLevel(value)
+    LOGGER.propagate = False
+
+
+configure_logging()
 
 # [text](target)  -- target may be "file.md#anchor", "#anchor", "file.md"
 LINK_RE = re.compile(r"\[(?:[^\]\\]|\\.)*\]\(([^)\s]+)\)")
@@ -116,12 +147,12 @@ def check_source(repo: pathlib.Path) -> int:
         total += 1
         slugs = headings.get(target_file)
         if slugs is None:
-            print(f"MISSING FILE  {src} -> {raw}")
+            LOGGER.warning("[source] missing file: %s -> %s", src, raw)
             bad += 1
         elif anchor not in slugs:
-            print(f"BROKEN ANCHOR {src} -> {raw}")
+            LOGGER.warning("[source] broken anchor: %s -> %s", src, raw)
             bad += 1
-    print(f"\n[source] {total} anchor links checked, {bad} broken")
+    LOGGER.info("[source] anchor check complete: checked=%d broken=%d", total, bad)
     return bad
 
 
@@ -138,12 +169,12 @@ def check_site(repo: pathlib.Path, site: pathlib.Path) -> int:
             html_name = html_name.with_name("index.html")
         page_ids = ids.get(html_name)
         if page_ids is None:
-            print(f"MISSING PAGE  {src} -> {raw}  (expected {html_name})")
+            LOGGER.warning("[site] missing page: %s -> %s (expected %s)", src, raw, html_name)
             bad += 1
         elif anchor not in page_ids:
-            print(f"BROKEN ANCHOR {src} -> {raw}")
+            LOGGER.warning("[site] broken anchor: %s -> %s", src, raw)
             bad += 1
-    print(f"\n[site] {total} anchor links checked, {bad} broken")
+    LOGGER.info("[site] anchor check complete: checked=%d broken=%d", total, bad)
     return bad
 
 
@@ -224,6 +255,7 @@ class CoreApi:
         self.config_identifiers: dict[str, str] = {}
 
     def request(self, method: str, path: str, body=None):
+        LOGGER.log(TRACE, "[ha] API request: method=%s path=%s", method, path)
         data = None if body is None else json.dumps(body).encode("utf-8")
         request = urllib.request.Request(
             f"{self.base_url}/{path.lstrip('/')}", data=data, method=method,
@@ -231,6 +263,7 @@ class CoreApi:
         )
         try:
             with urllib.request.urlopen(request, timeout=30) as response:
+                LOGGER.log(TRACE, "[ha] API response: method=%s path=%s status=%s", method, path, response.status)
                 return json.loads(response.read().decode("utf-8"))
         except urllib.error.HTTPError as exc:
             detail = exc.read().decode("utf-8", errors="replace")
@@ -318,24 +351,55 @@ def repair_instruction(entity_id: str, config: dict, outcome: str, replacement: 
         action = f"Replace the current Docs URL with `{proposed}`; leave every other field unchanged."
     else:
         action = "Manually add exactly one valid `📖 Docs:` URL that points to the documented entity section."
-    return f"Entity: `{entity_id}`\n\nFound: {found}\n\nWhat to fix: {action}\n\nDetection: {outcome}. HA Docs did not modify this entity."
+    return (
+        f"Entity: `{entity_id}`\n\n"
+        f"Detected Docs link: {found}\n\n"
+        f"Problem: {outcome}.\n\n"
+        f"What to fix: {action}\n\n"
+        "Open this automation or script in Home Assistant and edit only its description. "
+        "HA Docs only reported this Repair; it did not modify the entity."
+    )
 
 
-def check_ha(repo: pathlib.Path, api: CoreApi, github_base: str, report: bool, audit_file: pathlib.Path) -> int:
+def check_ha(repo: pathlib.Path, api: CoreApi, github_base: str, report: bool, audit_file: pathlib.Path,
+             concurrency: int = 4, progress_interval: int = 25) -> int:
+    """Report invalid HA Docs links without changing Home Assistant config."""
+    if concurrency < 1:
+        raise ValueError("concurrency must be at least 1")
+    if progress_interval < 1:
+        raise ValueError("progress_interval must be at least 1")
     headings = collect_headings(repo)
     detailed_headings = headings_with_text(repo)
     index = entity_index_targets(repo)
-    failures = raised = healthy = 0
+    failures = raised = healthy = cleared = 0
     entity_ids = api.entity_ids()
-    print(f"[ha] starting Docs-link scan for {len(entity_ids)} automations/scripts (report-only; Spook Repairs)")
-    for position, entity_id in enumerate(entity_ids, start=1):
-        if position == 1 or position % 25 == 0 or position == len(entity_ids):
-            print(f"[ha] progress {position}/{len(entity_ids)}: checking {entity_id}")
+    LOGGER.info(
+        "[ha] Docs-link Repair scan started: entities=%d report_only=%s concurrency=%d progress_every=%d",
+        len(entity_ids), report, concurrency, progress_interval,
+    )
+
+    def read_config(entity_id: str):
         try:
-            config = api.get_config(entity_id)
+            return entity_id, api.get_config(entity_id), None
         except RuntimeError as exc:
-            print(f"HA DOC LINK {entity_id}: configuration read failed: {exc}")
-            audit(audit_file, entity_id=entity_id, outcome="failed", reason=f"configuration read failed: {exc}")
+            return entity_id, None, exc
+
+    # Reads are bounded and parallel; Repair actions remain ordered and serial
+    # below so repeated scans update a given Spook issue deterministically.
+    results = {}
+    with ThreadPoolExecutor(max_workers=concurrency, thread_name_prefix="ha-docs") as executor:
+        futures = {executor.submit(read_config, entity_id): entity_id for entity_id in entity_ids}
+        for completed, future in enumerate(as_completed(futures), start=1):
+            entity_id, config, read_error = future.result()
+            results[entity_id] = config, read_error
+            if completed == 1 or completed % progress_interval == 0 or completed == len(entity_ids):
+                LOGGER.info("[ha] Docs-link scan progress: completed=%d total=%d current=%s", completed, len(entity_ids), entity_id)
+
+    for entity_id in entity_ids:
+        config, read_error = results[entity_id]
+        if read_error is not None:
+            LOGGER.warning("[ha] Docs-link config read failed: entity=%s error=%s", entity_id, read_error)
+            audit(audit_file, entity_id=entity_id, outcome="failed", reason=f"configuration read failed: {read_error}")
             failures += 1
             continue
         outcome, replacement, rule = reconcile_description(
@@ -343,9 +407,12 @@ def check_ha(repo: pathlib.Path, api: CoreApi, github_base: str, report: bool, a
         )
         if outcome == "valid":
             healthy += 1
+            LOGGER.debug("[ha] Docs link valid: entity=%s", entity_id)
             if report:
                 try:
                     api.call_service("repairs", "remove", {"issue_id": repair_issue_id(entity_id)})
+                    cleared += 1
+                    LOGGER.debug("[ha] Repair cleared: entity=%s", entity_id)
                 except RuntimeError:
                     # No pre-existing issue is normal; the remove action is
                     # deliberately best-effort and must not mark a valid link bad.
@@ -360,14 +427,17 @@ def check_ha(repo: pathlib.Path, api: CoreApi, github_base: str, report: bool, a
                 "persistent": True,
             })
         except RuntimeError as exc:
-            print(f"HA DOC LINK {entity_id}: could not raise repair: {exc}")
+            LOGGER.error("[ha] Repair report failed: entity=%s error=%s", entity_id, exc)
             audit(audit_file, entity_id=entity_id, outcome="failed", reason=f"could not raise repair: {exc}")
             failures += 1
             continue
         raised += 1
         audit(audit_file, entity_id=entity_id, outcome="repair-raised", reason=outcome, repair_rule=rule)
-        print(f"[ha] REPAIR RAISED {entity_id}: {rule or 'manual review'} — see Settings > System > Repairs")
-    print(f"\n[ha] scan complete: {healthy} healthy, {raised} Repairs raised, {failures} scan failures")
+        LOGGER.warning("[ha] Repair raised: entity=%s rule=%s location=Settings > System > Repairs", entity_id, rule or "manual-review")
+    LOGGER.info(
+        "[ha] Docs-link Repair scan complete: healthy=%d repairs_raised=%d repairs_cleared=%d failures=%d",
+        healthy, raised, cleared, failures,
+    )
     return failures
 
 
@@ -377,12 +447,17 @@ def main() -> int:
     ap.add_argument("--site", action="store_true")
     ap.add_argument("--ha", action="store_true", help="validate automation/script Docs links through the HA API")
     ap.add_argument("--report", action="store_true", help="raise Spook Repairs issues; never modify descriptions")
+    ap.add_argument("--log-level", default=os.getenv("HA_DOCS_LOG_LEVEL", "info"),
+                    choices=("trace", "debug", "info", "warning", "error"))
+    ap.add_argument("--scan-concurrency", type=int, default=int(os.getenv("HA_DOCS_SCAN_CONCURRENCY", "4")))
+    ap.add_argument("--progress-interval", type=int, default=int(os.getenv("HA_DOCS_PROGRESS_INTERVAL", "25")))
     ap.add_argument("--github-base", help="repository blob URL prefix, e.g. https://github.com/o/r/blob/main")
     ap.add_argument("--ha-api", default=os.getenv("HA_API_URL", "http://supervisor/core/api"))
     ap.add_argument("--audit-file", type=pathlib.Path, default=pathlib.Path(os.getenv("HA_DOC_LINK_AUDIT", "/data/doc-link-repairs.jsonl")))
     ap.add_argument("repo", type=pathlib.Path)
     ap.add_argument("site_dir", type=pathlib.Path, nargs="?")
     args = ap.parse_args()
+    configure_logging(args.log_level)
 
     if args.site:
         if args.site_dir is None:
@@ -394,7 +469,8 @@ def main() -> int:
         token = os.getenv("SUPERVISOR_TOKEN")
         if not token:
             ap.error("--ha requires SUPERVISOR_TOKEN")
-        return check_ha(args.repo, CoreApi(args.ha_api, token), args.github_base, args.report, args.audit_file)
+        return check_ha(args.repo, CoreApi(args.ha_api, token), args.github_base, args.report, args.audit_file,
+                        args.scan_concurrency, args.progress_interval)
     return check_source(args.repo)
 
 
