@@ -5,6 +5,7 @@ set -o nounset -o pipefail
 REPO=$(bashio::config 'repository')
 BRANCH=$(bashio::config 'branch')
 INTERVAL=$(bashio::config 'poll_interval')
+REPAIR_DOC_LINKS=$(bashio::config 'repair_doc_links')
 
 export SITE_NAME
 SITE_NAME=$(bashio::config 'site_name')
@@ -23,6 +24,7 @@ readonly CONFIG=/opt/ha_docs/mkdocs.yml
 readonly REPO_DIR=/data/repo
 readonly SITE_DIR=/data/site
 readonly STAMP_FILE=/data/.last_build
+readonly DOC_LINK_AUDIT=/data/doc-link-repairs.jsonl
 
 # The built site is cached against the commit it came from AND the builder that
 # produced it. Keying on the commit alone was a bug: /data survives an image
@@ -76,10 +78,49 @@ build_site() {
     rm -rf "${SITE_DIR}.old"
 }
 
+reconcile_ha_docs_links() {
+    if [ "${REPAIR_DOC_LINKS}" != "true" ]; then
+        bashio::log.info "HA documentation-link repair is disabled"
+        return 0
+    fi
+
+    # Only GitHub blob links are accepted in entity descriptions. Keep REPO
+    # (rather than AUTH_REPO) here so a configured git token cannot enter a
+    # description or an audit record.
+    case "${REPO}" in
+        https://github.com/*.git)
+            local base="${REPO%.git}/blob/${BRANCH}"
+            ;;
+        https://github.com/*)
+            local base="${REPO}/blob/${BRANCH}"
+            ;;
+        *)
+            bashio::log.warning "HA Docs-link reconciliation requires a GitHub repository URL"
+            return 1
+            ;;
+    esac
+
+    HA_DOC_LINK_AUDIT="${DOC_LINK_AUDIT}" \
+        python3 /opt/ha_docs/check_anchors.py --ha --repair \
+        --github-base "${base}" "${REPO_DIR}"
+}
+
 # One pull + conditional rebuild. Returns non-zero only on hard failure.
 refresh() {
     if ! sync_repo; then
         bashio::log.warning "git sync failed - keeping the current site"
+        return 1
+    fi
+
+    # This runs on add-on start and after every successful pull, including an
+    # unchanged commit. It validates live descriptions against the freshly
+    # pulled source before a static build is published.
+    if ! python3 /opt/ha_docs/check_anchors.py --source "${REPO_DIR}"; then
+        bashio::log.error "Source anchor check failed - keeping the current site"
+        return 1
+    fi
+    if ! reconcile_ha_docs_links; then
+        bashio::log.error "HA documentation-link reconciliation failed - no ambiguous link was changed"
         return 1
     fi
 
