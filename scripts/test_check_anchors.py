@@ -129,6 +129,20 @@ class CheckAnchorsTests(unittest.TestCase):
         self.assertIn(("GET", "config/automation/config/1740000000001", None), api.calls)
         self.assertIn(("POST", "config/script/config/example", {"sequence": []}), api.calls)
 
+    def test_read_failure_does_not_block_a_later_repair(self):
+        api = FakeApi({"automation.unreadable": self.config(), "script.legacy": self.config(marker="Docs:")})
+        original_get = api.get_config
+
+        def get_config(entity_id):
+            if entity_id == "automation.unreadable":
+                raise RuntimeError("HA GET: 502")
+            return original_get(entity_id)
+
+        api.get_config = get_config
+        failures = CHECK.check_ha(self.repo, api, BASE, True, self.audit)
+        self.assertEqual(failures, 1)
+        self.assertEqual([entity_id for entity_id, _ in api.writes], ["script.legacy"])
+
 
 if __name__ == "__main__":
     unittest.main()

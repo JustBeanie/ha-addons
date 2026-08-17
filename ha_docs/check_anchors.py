@@ -306,7 +306,13 @@ def check_ha(repo: pathlib.Path, api: CoreApi, github_base: str, repair: bool, a
     index = entity_index_targets(repo)
     bad = repaired = 0
     for entity_id in api.entity_ids():
-        config = api.get_config(entity_id)
+        try:
+            config = api.get_config(entity_id)
+        except RuntimeError as exc:
+            print(f"HA DOC LINK {entity_id}: configuration read failed: {exc}")
+            audit(audit_file, entity_id=entity_id, outcome="failed", reason=f"configuration read failed: {exc}")
+            bad += 1
+            continue
         before_hash = config_hash(config)
         outcome, replacement, rule = reconcile_description(
             entity_id, config, repo, github_base, headings, detailed_headings, index
@@ -318,7 +324,13 @@ def check_ha(repo: pathlib.Path, api: CoreApi, github_base: str, repair: bool, a
             audit(audit_file, entity_id=entity_id, outcome="failed", reason=outcome)
             bad += 1
             continue
-        latest = api.get_config(entity_id)
+        try:
+            latest = api.get_config(entity_id)
+        except RuntimeError as exc:
+            print(f"HA DOC LINK {entity_id}: pre-write read failed: {exc}")
+            audit(audit_file, entity_id=entity_id, outcome="failed", reason=f"pre-write read failed: {exc}")
+            bad += 1
+            continue
         if config_hash(latest) != before_hash:
             print(f"HA DOC LINK {entity_id}: configuration changed concurrently")
             audit(audit_file, entity_id=entity_id, outcome="conflict", reason="config hash changed")
@@ -333,8 +345,14 @@ def check_ha(repo: pathlib.Path, api: CoreApi, github_base: str, repair: bool, a
         compare_after.pop("description", None)
         if compare_before != compare_after:
             raise AssertionError("repair attempted to modify non-description fields")
-        api.set_config(entity_id, updated)
-        after = api.get_config(entity_id)
+        try:
+            api.set_config(entity_id, updated)
+            after = api.get_config(entity_id)
+        except RuntimeError as exc:
+            print(f"HA DOC LINK {entity_id}: write/readback failed: {exc}")
+            audit(audit_file, entity_id=entity_id, old_url=old_url, repair_rule=rule, outcome="failed", reason=f"write/readback failed: {exc}")
+            bad += 1
+            continue
         post, _, _ = reconcile_description(entity_id, after, repo, github_base, headings, detailed_headings, index)
         if post != "valid" or any(after.get(k) != latest.get(k) for k in set(after) | set(latest) if k != "description"):
             print(f"HA DOC LINK {entity_id}: post-write validation failed")
@@ -377,4 +395,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(1 if main() else 0)
-

@@ -1,7 +1,7 @@
 name: "HA Docs"
 slug: "ha_docs"
 description: "Serves a git repo of Markdown as a searchable MkDocs site behind HA ingress."
-version: "1.5.2"
+version: "1.5.3"
 url: "https://github.com/JustBeanie/ha-addons"
 
 arch:
