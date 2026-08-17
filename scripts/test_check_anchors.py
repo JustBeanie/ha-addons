@@ -96,19 +96,19 @@ class CheckAnchorsTests(unittest.TestCase):
         self.assertEqual(failures, 0)
         self.assertEqual(api.writes, [])
         self.assertEqual(api.services[0][0:2], ("repairs", "create"))
-        self.assertIn("legacy-marker", api.services[0][2]["description"])
+        self.assertIn("Replace `Docs:` with `📖 Docs:`", api.services[0][2]["description"])
 
     def test_unambiguous_index_target_repairs_url(self):
         failures, api = self.reconcile({"script.index_case": self.config(url=f"{BASE}/docs/missing.md#nope")})
         self.assertEqual(failures, 0)
         self.assertEqual(api.writes, [])
-        self.assertIn("entity-index", api.services[0][2]["description"])
+        self.assertIn("docs/foo.md#target-title", api.services[0][2]["description"])
 
     def test_unique_heading_repairs_separator_only_anchor(self):
         failures, api = self.reconcile({"script.heading": self.config(url=f"{BASE}/docs/foo.md#target_title")})
         self.assertEqual(failures, 0)
         self.assertEqual(api.writes, [])
-        self.assertIn("unique-heading", api.services[0][2]["description"])
+        self.assertIn("docs/foo.md#target-title", api.services[0][2]["description"])
 
     def test_ambiguous_heading_is_left_unchanged(self):
         (self.repo / "docs" / "foo.md").write_text("# Target Title\n\n## Target Title\n", encoding="utf-8")
