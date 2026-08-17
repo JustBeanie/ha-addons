@@ -19,6 +19,14 @@ only ever pulls.
 | `site_name` | `Docs` | Title in the header and browser tab. |
 | `git_token` | *(unset)* | Personal access token. Only needed for a private repo; never written to the log. |
 | `todo_entity` | *(unset)* | To-do list that notes are mirrored onto, e.g. `todo.docs_review`. Leave empty to keep notes inside the docs site. |
+| `report_doc_link_repairs` | `true` | Raise a Home Assistant Repairs issue for each invalid automation/script Docs link. Requires Spook. Never changes entity descriptions. |
+
+### Documentation-link repair reporting (Spook required)
+
+Install [Spook](https://spook.boo/) before enabling `report_doc_link_repairs`. HA Docs uses
+Spook's `repairs.create` and `repairs.remove` actions to raise or clear persistent issues in the
+Home Assistant Repairs dashboard. It only reports the entity, failure, and suggested repair rule;
+it never changes an automation or script description.
 
 ### Private repositories
 

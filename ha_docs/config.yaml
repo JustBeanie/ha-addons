@@ -1,7 +1,7 @@
 name: "HA Docs"
 slug: "ha_docs"
 description: "Serves a git repo of Markdown as a searchable MkDocs site behind HA ingress."
-version: "1.5.3"
+version: "1.6.0"
 url: "https://github.com/JustBeanie/ha-addons"
 
 arch:
@@ -31,7 +31,7 @@ options:
   poll_interval: 900
   site_name: "Docs"
   todo_entity: ""
-  repair_doc_links: true
+  report_doc_link_repairs: true
 
 schema:
   repository: "url"
@@ -43,6 +43,6 @@ schema:
   # Where notes are mirrored, e.g. todo.docs_review. Unset = highlights and
   # notes still work, they just stay inside the docs site.
   todo_entity: "str?"
-  # When true, normalize only unambiguous automation/script 📖 Docs: links
-  # after each successful repository sync. Ambiguous links fail visibly.
-  repair_doc_links: "bool"
+  # Requires the Spook integration. Raise a Repairs issue for every docs-link
+  # candidate; descriptions are never changed automatically.
+  report_doc_link_repairs: "bool"

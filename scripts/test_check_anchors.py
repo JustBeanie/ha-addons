@@ -24,6 +24,7 @@ class FakeApi:
         self.conflict = conflict
         self.reads = {key: 0 for key in configs}
         self.writes = []
+        self.services = []
 
     def entity_ids(self):
         return sorted(self.configs)
@@ -39,6 +40,9 @@ class FakeApi:
     def set_config(self, entity_id, config):
         self.writes.append((entity_id, copy.deepcopy(config)))
         self.configs[entity_id] = copy.deepcopy(config)
+
+    def call_service(self, domain, service, data):
+        self.services.append((domain, service, copy.deepcopy(data)))
 
 
 class RoutingCoreApi(CHECK.CoreApi):
@@ -86,39 +90,40 @@ class CheckAnchorsTests(unittest.TestCase):
         self.assertEqual(failures, 0)
         self.assertEqual(api.writes, [])
 
-    def test_legacy_marker_is_normalized_only(self):
+    def test_legacy_marker_raises_repair_without_writing(self):
         original = self.config(marker="Docs:")
         failures, api = self.reconcile({"script.legacy": original})
         self.assertEqual(failures, 0)
-        self.assertEqual(len(api.writes), 1)
-        changed = api.writes[0][1]
-        self.assertIn("📖 Docs:", changed["description"])
-        self.assertEqual(changed["sequence"], original["sequence"])
+        self.assertEqual(api.writes, [])
+        self.assertEqual(api.services[0][0:2], ("repairs", "create"))
+        self.assertIn("legacy-marker", api.services[0][2]["description"])
 
     def test_unambiguous_index_target_repairs_url(self):
         failures, api = self.reconcile({"script.index_case": self.config(url=f"{BASE}/docs/missing.md#nope")})
         self.assertEqual(failures, 0)
-        self.assertIn("docs/foo.md#target-title", api.writes[0][1]["description"])
+        self.assertEqual(api.writes, [])
+        self.assertIn("entity-index", api.services[0][2]["description"])
 
     def test_unique_heading_repairs_separator_only_anchor(self):
         failures, api = self.reconcile({"script.heading": self.config(url=f"{BASE}/docs/foo.md#target_title")})
         self.assertEqual(failures, 0)
-        self.assertIn("#target-title", api.writes[0][1]["description"])
+        self.assertEqual(api.writes, [])
+        self.assertIn("unique-heading", api.services[0][2]["description"])
 
     def test_ambiguous_heading_is_left_unchanged(self):
         (self.repo / "docs" / "foo.md").write_text("# Target Title\n\n## Target Title\n", encoding="utf-8")
         failures, api = self.reconcile({"script.ambiguous": self.config(url=f"{BASE}/docs/foo.md#target_title")})
-        self.assertEqual(failures, 1)
+        self.assertEqual(failures, 0)
         self.assertEqual(api.writes, [])
 
     def test_missing_target_is_left_unchanged(self):
         failures, api = self.reconcile({"script.missing": self.config(url=f"{BASE}/docs/missing.md#nope")})
-        self.assertEqual(failures, 1)
+        self.assertEqual(failures, 0)
         self.assertEqual(api.writes, [])
 
-    def test_conflict_is_left_unchanged(self):
+    def test_candidate_never_writes_configuration(self):
         failures, api = self.reconcile({"script.conflict": self.config(marker="Docs:")}, conflict="script.conflict")
-        self.assertEqual(failures, 1)
+        self.assertEqual(failures, 0)
         self.assertEqual(api.writes, [])
 
     def test_core_api_uses_automation_config_id_and_script_key(self):
@@ -141,7 +146,8 @@ class CheckAnchorsTests(unittest.TestCase):
         api.get_config = get_config
         failures = CHECK.check_ha(self.repo, api, BASE, True, self.audit)
         self.assertEqual(failures, 1)
-        self.assertEqual([entity_id for entity_id, _ in api.writes], ["script.legacy"])
+        self.assertEqual(api.writes, [])
+        self.assertEqual([call[1] for call in api.services], ["create"])
 
 
 if __name__ == "__main__":

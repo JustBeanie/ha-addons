@@ -267,6 +267,9 @@ class CoreApi:
         config_id = self.config_identifiers.get(entity_id, object_id)
         self.request("POST", f"config/{domain}/config/{config_id}", config)
 
+    def call_service(self, domain: str, service: str, data: dict) -> None:
+        self.request("POST", f"services/{domain}/{service}", data)
+
 
 def audit(path: pathlib.Path, **record) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -300,70 +303,54 @@ def reconcile_description(entity_id: str, config: dict, repo: pathlib.Path, gith
     return "broken or ambiguous Docs target", None, None
 
 
-def check_ha(repo: pathlib.Path, api: CoreApi, github_base: str, repair: bool, audit_file: pathlib.Path) -> int:
+def repair_issue_id(entity_id: str) -> str:
+    return "ha_docs_link_" + re.sub(r"[^a-z0-9_]+", "_", entity_id.casefold())
+
+
+def check_ha(repo: pathlib.Path, api: CoreApi, github_base: str, report: bool, audit_file: pathlib.Path) -> int:
     headings = collect_headings(repo)
     detailed_headings = headings_with_text(repo)
     index = entity_index_targets(repo)
-    bad = repaired = 0
+    failures = raised = cleared = 0
     for entity_id in api.entity_ids():
         try:
             config = api.get_config(entity_id)
         except RuntimeError as exc:
             print(f"HA DOC LINK {entity_id}: configuration read failed: {exc}")
             audit(audit_file, entity_id=entity_id, outcome="failed", reason=f"configuration read failed: {exc}")
-            bad += 1
+            failures += 1
             continue
-        before_hash = config_hash(config)
         outcome, replacement, rule = reconcile_description(
             entity_id, config, repo, github_base, headings, detailed_headings, index
         )
         if outcome == "valid":
-            continue
-        if outcome != "repair" or not repair:
-            print(f"HA DOC LINK {entity_id}: {outcome}")
-            audit(audit_file, entity_id=entity_id, outcome="failed", reason=outcome)
-            bad += 1
+            if report:
+                try:
+                    api.call_service("repairs", "remove", {"issue_id": repair_issue_id(entity_id)})
+                    cleared += 1
+                except RuntimeError:
+                    # No pre-existing issue is normal; the remove action is
+                    # deliberately best-effort and must not mark a valid link bad.
+                    pass
             continue
         try:
-            latest = api.get_config(entity_id)
+            api.call_service("repairs", "create", {
+                "issue_id": repair_issue_id(entity_id),
+                "title": "HA Docs link needs repair",
+                "description": f"`{entity_id}`: {outcome}. Suggested rule: {rule or 'manual review'}. The HA Docs add-on did not modify this entity.",
+                "severity": "warning",
+                "persistent": True,
+            })
         except RuntimeError as exc:
-            print(f"HA DOC LINK {entity_id}: pre-write read failed: {exc}")
-            audit(audit_file, entity_id=entity_id, outcome="failed", reason=f"pre-write read failed: {exc}")
-            bad += 1
+            print(f"HA DOC LINK {entity_id}: could not raise repair: {exc}")
+            audit(audit_file, entity_id=entity_id, outcome="failed", reason=f"could not raise repair: {exc}")
+            failures += 1
             continue
-        if config_hash(latest) != before_hash:
-            print(f"HA DOC LINK {entity_id}: configuration changed concurrently")
-            audit(audit_file, entity_id=entity_id, outcome="conflict", reason="config hash changed")
-            bad += 1
-            continue
-        updated = copy.deepcopy(latest)
-        old_url = DOCS_RE.search(updated.get("description", "")).group("url")
-        updated["description"] = replacement
-        # Defensive invariant: the write payload differs only in description.
-        compare_before, compare_after = copy.deepcopy(latest), copy.deepcopy(updated)
-        compare_before.pop("description", None)
-        compare_after.pop("description", None)
-        if compare_before != compare_after:
-            raise AssertionError("repair attempted to modify non-description fields")
-        try:
-            api.set_config(entity_id, updated)
-            after = api.get_config(entity_id)
-        except RuntimeError as exc:
-            print(f"HA DOC LINK {entity_id}: write/readback failed: {exc}")
-            audit(audit_file, entity_id=entity_id, old_url=old_url, repair_rule=rule, outcome="failed", reason=f"write/readback failed: {exc}")
-            bad += 1
-            continue
-        post, _, _ = reconcile_description(entity_id, after, repo, github_base, headings, detailed_headings, index)
-        if post != "valid" or any(after.get(k) != latest.get(k) for k in set(after) | set(latest) if k != "description"):
-            print(f"HA DOC LINK {entity_id}: post-write validation failed")
-            audit(audit_file, entity_id=entity_id, old_url=old_url, new_url=DOCS_RE.search(after.get("description", "")).group("url") if DOCS_RE.search(after.get("description", "")) else None, repair_rule=rule, outcome="failed", reason="post-write validation")
-            bad += 1
-            continue
-        repaired += 1
-        audit(audit_file, entity_id=entity_id, old_url=old_url, new_url=DOCS_RE.search(after["description"]).group("url"), repair_rule=rule, outcome="repaired")
-        print(f"HA DOC LINK {entity_id}: repaired ({rule})")
-    print(f"\n[ha] documentation links checked; {repaired} repaired, {bad} unresolved")
-    return bad
+        raised += 1
+        audit(audit_file, entity_id=entity_id, outcome="repair-raised", reason=outcome, repair_rule=rule)
+        print(f"HA DOC LINK {entity_id}: repair raised ({rule or 'manual review'})")
+    print(f"\n[ha] documentation links checked; {raised} repairs raised, {cleared} cleared, {failures} failures")
+    return failures
 
 
 def main() -> int:
@@ -371,7 +358,7 @@ def main() -> int:
     ap.add_argument("--source", action="store_true")
     ap.add_argument("--site", action="store_true")
     ap.add_argument("--ha", action="store_true", help="validate automation/script Docs links through the HA API")
-    ap.add_argument("--repair", action="store_true", help="apply only unambiguous HA Docs-link repairs")
+    ap.add_argument("--report", action="store_true", help="raise Spook Repairs issues; never modify descriptions")
     ap.add_argument("--github-base", help="repository blob URL prefix, e.g. https://github.com/o/r/blob/main")
     ap.add_argument("--ha-api", default=os.getenv("HA_API_URL", "http://supervisor/core/api"))
     ap.add_argument("--audit-file", type=pathlib.Path, default=pathlib.Path(os.getenv("HA_DOC_LINK_AUDIT", "/data/doc-link-repairs.jsonl")))
@@ -389,7 +376,7 @@ def main() -> int:
         token = os.getenv("SUPERVISOR_TOKEN")
         if not token:
             ap.error("--ha requires SUPERVISOR_TOKEN")
-        return check_ha(args.repo, CoreApi(args.ha_api, token), args.github_base, args.repair, args.audit_file)
+        return check_ha(args.repo, CoreApi(args.ha_api, token), args.github_base, args.report, args.audit_file)
     return check_source(args.repo)
 
 

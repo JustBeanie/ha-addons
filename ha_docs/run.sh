@@ -5,7 +5,7 @@ set -o nounset -o pipefail
 REPO=$(bashio::config 'repository')
 BRANCH=$(bashio::config 'branch')
 INTERVAL=$(bashio::config 'poll_interval')
-REPAIR_DOC_LINKS=$(bashio::config 'repair_doc_links')
+REPORT_DOC_LINK_REPAIRS=$(bashio::config 'report_doc_link_repairs')
 
 export SITE_NAME
 SITE_NAME=$(bashio::config 'site_name')
@@ -79,8 +79,8 @@ build_site() {
 }
 
 reconcile_ha_docs_links() {
-    if [ "${REPAIR_DOC_LINKS}" != "true" ]; then
-        bashio::log.info "HA documentation-link repair is disabled"
+    if [ "${REPORT_DOC_LINK_REPAIRS}" != "true" ]; then
+        bashio::log.info "HA documentation-link repair reporting is disabled"
         return 0
     fi
 
@@ -101,7 +101,7 @@ reconcile_ha_docs_links() {
     esac
 
     HA_DOC_LINK_AUDIT="${DOC_LINK_AUDIT}" \
-        python3 /opt/ha_docs/check_anchors.py --ha --repair \
+        python3 /opt/ha_docs/check_anchors.py --ha --report \
         --github-base "${base}" "${REPO_DIR}"
 }
 
@@ -120,7 +120,7 @@ refresh() {
         return 1
     fi
     if ! reconcile_ha_docs_links; then
-        bashio::log.error "HA documentation-link reconciliation failed - no ambiguous link was changed"
+        bashio::log.error "HA documentation-link repair reporting failed"
         return 1
     fi
 
