@@ -9,6 +9,7 @@ REPORT_DOC_LINK_REPAIRS=$(bashio::config 'report_doc_link_repairs')
 REPAIR_SCAN_ON_START=$(bashio::config 'repair_scan_on_start')
 REPAIR_SCAN_CONCURRENCY=$(bashio::config 'repair_scan_concurrency')
 REPAIR_PROGRESS_INTERVAL=$(bashio::config 'repair_progress_interval')
+REPAIR_SCAN_HEARTBEAT_INTERVAL=$(bashio::config 'repair_scan_heartbeat_interval')
 LOG_LEVEL=$(bashio::config 'log_level')
 
 case "${LOG_LEVEL}" in
@@ -141,6 +142,7 @@ reconcile_ha_docs_links() {
         --log-level "${LOG_LEVEL}" \
         --scan-concurrency "${REPAIR_SCAN_CONCURRENCY}" \
         --progress-interval "${REPAIR_PROGRESS_INTERVAL}" \
+        --heartbeat-interval "${REPAIR_SCAN_HEARTBEAT_INTERVAL}" \
         --github-base "${base}" "${REPO_DIR}"
 }
 

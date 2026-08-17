@@ -190,6 +190,26 @@ class CheckAnchorsTests(unittest.TestCase):
         self.assertIn("Docs-link scan progress", output)
         self.assertIn("Docs-link Repair scan complete", output)
 
+    def test_scan_heartbeat_reports_a_stalled_config_api(self):
+        stream = io.StringIO()
+        CHECK.configure_logging("info", stream)
+        api = FakeApi({"script.valid": self.config()})
+        original_get = api.get_config
+
+        def slow_get(entity_id):
+            time.sleep(1.05)
+            return original_get(entity_id)
+
+        api.get_config = slow_get
+        try:
+            failures = CHECK.check_ha(self.repo, api, BASE, True, self.audit,
+                                      concurrency=1, progress_interval=1, heartbeat_interval=1)
+        finally:
+            CHECK.configure_logging()
+        self.assertEqual(failures, 0)
+        self.assertIn("Docs-link scan dispatched", stream.getvalue())
+        self.assertIn("waiting for HA config API", stream.getvalue())
+
     def test_debug_logs_include_per_entity_decisions_but_info_does_not(self):
         info_stream = io.StringIO()
         CHECK.configure_logging("info", info_stream)

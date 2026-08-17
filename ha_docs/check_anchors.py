@@ -32,7 +32,8 @@ import os
 import pathlib
 import re
 import sys
-from concurrent.futures import ThreadPoolExecutor, as_completed
+import time
+from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -362,20 +363,22 @@ def repair_instruction(entity_id: str, config: dict, outcome: str, replacement: 
 
 
 def check_ha(repo: pathlib.Path, api: CoreApi, github_base: str, report: bool, audit_file: pathlib.Path,
-             concurrency: int = 4, progress_interval: int = 25) -> int:
+             concurrency: int = 4, progress_interval: int = 25, heartbeat_interval: int = 10) -> int:
     """Report invalid HA Docs links without changing Home Assistant config."""
     if concurrency < 1:
         raise ValueError("concurrency must be at least 1")
     if progress_interval < 1:
         raise ValueError("progress_interval must be at least 1")
+    if heartbeat_interval < 1:
+        raise ValueError("heartbeat_interval must be at least 1")
     headings = collect_headings(repo)
     detailed_headings = headings_with_text(repo)
     index = entity_index_targets(repo)
-    failures = raised = healthy = cleared = 0
+    failures = raised = healthy = removal_attempts = 0
     entity_ids = api.entity_ids()
     LOGGER.info(
-        "[ha] Docs-link Repair scan started: entities=%d report_only=%s concurrency=%d progress_every=%d",
-        len(entity_ids), report, concurrency, progress_interval,
+        "[ha] Docs-link Repair scan started: entities=%d report_only=%s concurrency=%d progress_every=%d heartbeat_every=%ds",
+        len(entity_ids), report, concurrency, progress_interval, heartbeat_interval,
     )
 
     def read_config(entity_id: str):
@@ -389,11 +392,24 @@ def check_ha(repo: pathlib.Path, api: CoreApi, github_base: str, report: bool, a
     results = {}
     with ThreadPoolExecutor(max_workers=concurrency, thread_name_prefix="ha-docs") as executor:
         futures = {executor.submit(read_config, entity_id): entity_id for entity_id in entity_ids}
-        for completed, future in enumerate(as_completed(futures), start=1):
-            entity_id, config, read_error = future.result()
-            results[entity_id] = config, read_error
-            if completed == 1 or completed % progress_interval == 0 or completed == len(entity_ids):
-                LOGGER.info("[ha] Docs-link scan progress: completed=%d total=%d current=%s", completed, len(entity_ids), entity_id)
+        pending = set(futures)
+        completed = 0
+        LOGGER.info("[ha] Docs-link scan dispatched: queued=%d active_workers=%d", len(futures), concurrency)
+        while pending:
+            done, pending = wait(pending, timeout=heartbeat_interval, return_when=FIRST_COMPLETED)
+            if not done:
+                active = sum(future.running() for future in pending)
+                LOGGER.info(
+                    "[ha] Docs-link scan waiting for HA config API: completed=%d total=%d active=%d queued=%d",
+                    completed, len(entity_ids), active, len(pending) - active,
+                )
+                continue
+            for future in done:
+                entity_id, config, read_error = future.result()
+                results[entity_id] = config, read_error
+                completed += 1
+                if completed == 1 or completed % progress_interval == 0 or completed == len(entity_ids):
+                    LOGGER.info("[ha] Docs-link scan progress: completed=%d total=%d current=%s", completed, len(entity_ids), entity_id)
 
     for entity_id in entity_ids:
         config, read_error = results[entity_id]
@@ -411,8 +427,8 @@ def check_ha(repo: pathlib.Path, api: CoreApi, github_base: str, report: bool, a
             if report:
                 try:
                     api.call_service("repairs", "remove", {"issue_id": repair_issue_id(entity_id)})
-                    cleared += 1
-                    LOGGER.debug("[ha] Repair cleared: entity=%s", entity_id)
+                    removal_attempts += 1
+                    LOGGER.debug("[ha] Repair removal requested: entity=%s", entity_id)
                 except RuntimeError:
                     # No pre-existing issue is normal; the remove action is
                     # deliberately best-effort and must not mark a valid link bad.
@@ -435,8 +451,8 @@ def check_ha(repo: pathlib.Path, api: CoreApi, github_base: str, report: bool, a
         audit(audit_file, entity_id=entity_id, outcome="repair-raised", reason=outcome, repair_rule=rule)
         LOGGER.warning("[ha] Repair raised: entity=%s rule=%s location=Settings > System > Repairs", entity_id, rule or "manual-review")
     LOGGER.info(
-        "[ha] Docs-link Repair scan complete: healthy=%d repairs_raised=%d repairs_cleared=%d failures=%d",
-        healthy, raised, cleared, failures,
+        "[ha] Docs-link Repair scan complete: healthy=%d repairs_raised=%d repair_removals_requested=%d failures=%d",
+        healthy, raised, removal_attempts, failures,
     )
     return failures
 
@@ -451,6 +467,7 @@ def main() -> int:
                     choices=("trace", "debug", "info", "warning", "error"))
     ap.add_argument("--scan-concurrency", type=int, default=int(os.getenv("HA_DOCS_SCAN_CONCURRENCY", "4")))
     ap.add_argument("--progress-interval", type=int, default=int(os.getenv("HA_DOCS_PROGRESS_INTERVAL", "25")))
+    ap.add_argument("--heartbeat-interval", type=int, default=int(os.getenv("HA_DOCS_HEARTBEAT_INTERVAL", "10")))
     ap.add_argument("--github-base", help="repository blob URL prefix, e.g. https://github.com/o/r/blob/main")
     ap.add_argument("--ha-api", default=os.getenv("HA_API_URL", "http://supervisor/core/api"))
     ap.add_argument("--audit-file", type=pathlib.Path, default=pathlib.Path(os.getenv("HA_DOC_LINK_AUDIT", "/data/doc-link-repairs.jsonl")))
@@ -470,7 +487,7 @@ def main() -> int:
         if not token:
             ap.error("--ha requires SUPERVISOR_TOKEN")
         return check_ha(args.repo, CoreApi(args.ha_api, token), args.github_base, args.report, args.audit_file,
-                        args.scan_concurrency, args.progress_interval)
+                        args.scan_concurrency, args.progress_interval, args.heartbeat_interval)
     return check_source(args.repo)
 
 
