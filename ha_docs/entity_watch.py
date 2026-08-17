@@ -18,6 +18,9 @@ import websockets
 LOGGER = logging.getLogger("ha_docs.entity_watch")
 TRACE = 5
 logging.addLevelName(TRACE, "TRACE")
+RUNTIME_ATTRIBUTES = {
+    "current", "last_action", "last_action_time", "last_reported", "last_triggered",
+}
 
 
 class LocalIsoFormatter(logging.Formatter):
@@ -34,6 +37,34 @@ def configure_logging(level: str) -> None:
     LOGGER.addHandler(handler)
     LOGGER.setLevel(value)
     LOGGER.propagate = False
+
+
+def is_runtime_state_change(event_data: dict) -> bool:
+    """Return whether an entity event is only normal execution activity.
+
+    Scripts change from off to on to off when executed.  Their ``current`` and
+    ``last_triggered`` attributes also change as a normal side effect.  Those
+    are not configuration edits, so a Docs-link validation would be noisy and
+    pointless.  Ignore the same operational state flips for automations.
+    """
+    entity_id = event_data.get("entity_id", "")
+    old_state = event_data.get("old_state") or {}
+    new_state = event_data.get("new_state") or {}
+    old_value = old_state.get("state")
+    new_value = new_state.get("state")
+    if old_value != new_value:
+        return True
+    old_attributes = {
+        key: value for key, value in old_state.get("attributes", {}).items()
+        if key not in RUNTIME_ATTRIBUTES
+    }
+    new_attributes = {
+        key: value for key, value in new_state.get("attributes", {}).items()
+        if key not in RUNTIME_ATTRIBUTES
+    }
+    # A same-state event with only last-run metadata is another ordinary
+    # execution update.  The entity_id guard keeps malformed events visible.
+    return bool(entity_id) and old_attributes == new_attributes
 
 
 class EntityWatcher:
@@ -120,6 +151,9 @@ class EntityWatcher:
                 data = event.get("event", {}).get("data", {})
                 entity_id = data.get("entity_id", "")
                 if entity_id.startswith(("automation.", "script.")):
+                    if is_runtime_state_change(data):
+                        LOGGER.debug("[ha] Entity runtime activity ignored: entity=%s", entity_id)
+                        continue
                     self.queue_check(entity_id)
 
     async def run(self) -> None:

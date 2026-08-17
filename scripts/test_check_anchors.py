@@ -286,6 +286,12 @@ class CheckAnchorsTests(unittest.TestCase):
         self.assertIn("entity_watch.py", runner)
         self.assertIn("HA_DOCS_READY_FILE", runner)
 
+    def test_entity_watcher_ignores_script_execution_activity(self):
+        watcher = (ROOT / "ha_docs" / "entity_watch.py").read_text(encoding="utf-8")
+        self.assertIn("is_runtime_state_change", watcher)
+        self.assertIn("Entity runtime activity ignored", watcher)
+        self.assertIn("last_triggered", watcher)
+
     def test_issue_ids_are_stable_and_entity_specific(self):
         self.assertEqual(CHECK.repair_issue_id("script.Wake-Up Stage 1"), "ha_docs_link_script_wake_up_stage_1")
         self.assertNotEqual(CHECK.repair_issue_id("script.one"), CHECK.repair_issue_id("script.two"))
