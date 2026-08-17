@@ -89,6 +89,7 @@ class CheckAnchorsTests(unittest.TestCase):
         failures, api = self.reconcile({"script.valid": self.config()})
         self.assertEqual(failures, 0)
         self.assertEqual(api.writes, [])
+        self.assertEqual(api.services, [("repairs", "remove", {"issue_id": "ha_docs_link_script_valid"})])
 
     def test_legacy_marker_raises_repair_without_writing(self):
         original = self.config(marker="Docs:")
@@ -97,6 +98,9 @@ class CheckAnchorsTests(unittest.TestCase):
         self.assertEqual(api.writes, [])
         self.assertEqual(api.services[0][0:2], ("repairs", "create"))
         self.assertIn("Replace `Docs:` with `📖 Docs:`", api.services[0][2]["description"])
+        self.assertEqual(api.services[0][2]["issue_id"], "ha_docs_link_script_legacy")
+        self.assertEqual(api.services[0][2]["severity"], "warning")
+        self.assertTrue(api.services[0][2]["persistent"])
 
     def test_unambiguous_index_target_repairs_url(self):
         failures, api = self.reconcile({"script.index_case": self.config(url=f"{BASE}/docs/missing.md#nope")})
@@ -148,6 +152,21 @@ class CheckAnchorsTests(unittest.TestCase):
         self.assertEqual(failures, 1)
         self.assertEqual(api.writes, [])
         self.assertEqual([call[1] for call in api.services], ["create"])
+
+    def test_spook_create_failure_is_reported_without_writing(self):
+        api = FakeApi({"script.failed_report": self.config(marker="Docs:")})
+
+        def call_service(domain, service, data):
+            raise RuntimeError("repairs.create unavailable")
+
+        api.call_service = call_service
+        failures = CHECK.check_ha(self.repo, api, BASE, True, self.audit)
+        self.assertEqual(failures, 1)
+        self.assertEqual(api.writes, [])
+
+    def test_issue_ids_are_stable_and_entity_specific(self):
+        self.assertEqual(CHECK.repair_issue_id("script.Wake-Up Stage 1"), "ha_docs_link_script_wake_up_stage_1")
+        self.assertNotEqual(CHECK.repair_issue_id("script.one"), CHECK.repair_issue_id("script.two"))
 
 
 if __name__ == "__main__":
