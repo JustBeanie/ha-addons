@@ -24,6 +24,8 @@ only ever pulls.
 | `repair_scan_concurrency` | `4` | Concurrent configuration reads during the scan. Range: 1–8; Repair actions remain serial. |
 | `repair_progress_interval` | `25` | Entities between visible scan-progress log records. Range: 1–100. |
 | `repair_scan_heartbeat_interval` | `10` | Seconds between visible “waiting for HA config API” records when reads stall. Range: 1–300. |
+| `watch_entity_updates` | `true` | Watch automation/script entity changes and run a report-only check for only that entity. Requires Spook and `report_doc_link_repairs`. |
+| `entity_update_debounce` | `3` | Seconds to coalesce successive changes for the same entity before its targeted check. Range: 1–30. |
 | `log_level` | `info` | Applies to all HA Docs components: `trace`, `debug`, `info`, `warning`, or `error`. |
 
 ### Documentation-link repair reporting (Spook required)
@@ -37,6 +39,8 @@ exact marker or URL change to make when the target is unambiguous.
 HA Docs starts ingress before it fetches or scans, so the previously built site remains usable while a refresh is in progress. A first-ever start serves a small “initial sync” page until its first successful build.
 
 Every HA Docs log line includes a local ISO-8601 timestamp and a level. At `info`, the scanner reports dispatch, timed waiting heartbeats, periodic progress, Repairs raised, and its healthy/raised/removal-requested/failure summary. A valid link always invokes Spook's `repairs.remove`, which clears its previously raised Repair; the summary counts removal requests because Spook deliberately treats an already-absent issue as a successful no-op. `debug` adds per-entity decisions; `trace` adds token-safe API request metadata. No level logs Supervisor tokens or full entity descriptions.
+
+After its initial reconciliation, HA Docs also subscribes to Home Assistant automation and script entity changes. It debounces reload-related bursts, then runs the same report-only checker for the one changed entity—never a new full scan. The log records `Entity update detected; checking only entity=...`, followed by that entity's targeted result. A full reconciliation runs only at add-on start or when the documentation source changes, because a documentation change can affect more than one entity.
 
 ### Repeatable live Repair test fixture
 

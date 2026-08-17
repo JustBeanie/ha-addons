@@ -157,6 +157,36 @@ class CheckAnchorsTests(unittest.TestCase):
         self.assertEqual(api.writes, [])
         self.assertEqual([call[1] for call in api.services], ["create"])
 
+    def test_missing_storage_config_is_skipped_and_does_not_fail_scan(self):
+        api = FakeApi({"script.orphan": self.config(), "script.legacy": self.config(marker="Docs:")})
+        original_get = api.get_config
+
+        def get_config(entity_id):
+            if entity_id == "script.orphan":
+                raise CHECK.CoreApiError("GET", "config/script/config/orphan", 404, "not found")
+            return original_get(entity_id)
+
+        api.get_config = get_config
+        failures = CHECK.check_ha(self.repo, api, BASE, True, self.audit)
+        self.assertEqual(failures, 0)
+        self.assertEqual(api.writes, [])
+        self.assertIn(("repairs", "remove", {"issue_id": "ha_docs_link_script_orphan"}), api.services)
+        creates = [data for domain, service, data in api.services if (domain, service) == ("repairs", "create")]
+        self.assertEqual(len(creates), 1)
+        self.assertEqual(creates[0]["issue_id"], "ha_docs_link_script_legacy")
+        audit = self.audit.read_text(encoding="utf-8")
+        self.assertIn('"outcome": "skipped-missing-config"', audit)
+
+    def test_targeted_scan_checks_only_requested_entity(self):
+        api = FakeApi({"script.valid": self.config(), "script.legacy": self.config(marker="Docs:")})
+        failures = CHECK.check_ha(
+            self.repo, api, BASE, True, self.audit, selected_entity_ids=["script.legacy"]
+        )
+        self.assertEqual(failures, 0)
+        self.assertEqual(api.reads["script.valid"], 0)
+        self.assertEqual(api.reads["script.legacy"], 1)
+        self.assertEqual([call[1] for call in api.services], ["create"])
+
     def test_spook_create_failure_is_reported_without_writing(self):
         api = FakeApi({"script.failed_report": self.config(marker="Docs:")})
 
@@ -253,6 +283,8 @@ class CheckAnchorsTests(unittest.TestCase):
         self.assertLess(runner.index("nginx &"), runner.index("refresh_worker &"))
         self.assertIn("Initial documentation sync is in progress", runner)
         self.assertIn("wait \"${WORKER_PID}\"", runner)
+        self.assertIn("entity_watch.py", runner)
+        self.assertIn("HA_DOCS_READY_FILE", runner)
 
     def test_issue_ids_are_stable_and_entity_specific(self):
         self.assertEqual(CHECK.repair_issue_id("script.Wake-Up Stage 1"), "ha_docs_link_script_wake_up_stage_1")

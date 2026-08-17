@@ -14,6 +14,7 @@ RUN apk add --no-cache \
         nginx \
         python3 \
         py3-pip \
+        py3-websockets \
     && apk add --no-cache --virtual .build-deps \
         build-base \
         python3-dev \
@@ -37,7 +38,7 @@ RUN apk add --no-cache --virtual .dl-deps curl \
     && apk del .dl-deps
 
 COPY mkdocs.yml ghslug.py annotations.py /opt/ha_docs/
-COPY check_anchors.py /opt/ha_docs/check_anchors.py
+COPY check_anchors.py entity_watch.py /opt/ha_docs/
 # Merges with the directory the RUN above created - COPY does not clear the
 # destination - so the vendored mermaid.min.js survives. Keep this ordering:
 # the 3.5 MB download stays in a cached layer when only the overrides change.

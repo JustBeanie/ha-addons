@@ -247,6 +247,17 @@ def unique_heading_repair(url: str, repo: pathlib.Path, github_base: str, detail
     return f"{github_base.rstrip('/')}/{target[0].as_posix()}#{matches[0]}"
 
 
+class CoreApiError(RuntimeError):
+    """An HA Core API failure with its HTTP status retained for callers."""
+
+    def __init__(self, method: str, path: str, status: int, detail: str):
+        self.method = method
+        self.path = path
+        self.status = status
+        self.detail = detail
+        super().__init__(f"HA {method} {path}: {status} {detail}")
+
+
 class CoreApi:
     """Minimal, injectable client for the authenticated HA core API."""
 
@@ -268,26 +279,37 @@ class CoreApi:
                 return json.loads(response.read().decode("utf-8"))
         except urllib.error.HTTPError as exc:
             detail = exc.read().decode("utf-8", errors="replace")
-            raise RuntimeError(f"HA {method} {path}: {exc.code} {detail}") from exc
+            raise CoreApiError(method, path, exc.code, detail) from exc
+
+    def remember_config_identifier(self, state: dict) -> str | None:
+        """Record the API config key for one live automation or script state."""
+        entity_id = state.get("entity_id", "")
+        if not entity_id.startswith(("automation.", "script.")):
+            return None
+        if entity_id.startswith("automation."):
+            # Automation editor URLs use the immutable config ``id`` rather
+            # than the registry object_id. Scripts use their storage key.
+            config_id = state.get("attributes", {}).get("id")
+            if not config_id:
+                raise RuntimeError(f"automation {entity_id} has no configuration id")
+            self.config_identifiers[entity_id] = str(config_id)
+        else:
+            self.config_identifiers[entity_id] = entity_id.split(".", 1)[1]
+        return entity_id
 
     def entity_ids(self) -> list[str]:
         states = self.request("GET", "states")
         entity_ids = []
         for state in states:
-            entity_id = state.get("entity_id", "")
-            if not entity_id.startswith(("automation.", "script.")):
-                continue
-            # Automation editor URLs use the immutable config ``id`` rather
-            # than the registry object_id. Scripts use their storage key.
-            if entity_id.startswith("automation."):
-                config_id = state.get("attributes", {}).get("id")
-                if not config_id:
-                    raise RuntimeError(f"automation {entity_id} has no configuration id")
-                self.config_identifiers[entity_id] = str(config_id)
-            else:
-                self.config_identifiers[entity_id] = entity_id.split(".", 1)[1]
-            entity_ids.append(entity_id)
+            entity_id = self.remember_config_identifier(state)
+            if entity_id:
+                entity_ids.append(entity_id)
         return sorted(entity_ids)
+
+    def prepare_entity(self, entity_id: str) -> bool:
+        """Load one entity's state so a targeted check has its config key."""
+        state = self.request("GET", f"states/{entity_id}")
+        return self.remember_config_identifier(state) == entity_id
 
     def get_config(self, entity_id: str) -> dict:
         domain, object_id = entity_id.split(".", 1)
@@ -363,7 +385,8 @@ def repair_instruction(entity_id: str, config: dict, outcome: str, replacement: 
 
 
 def check_ha(repo: pathlib.Path, api: CoreApi, github_base: str, report: bool, audit_file: pathlib.Path,
-             concurrency: int = 4, progress_interval: int = 25, heartbeat_interval: int = 10) -> int:
+             concurrency: int = 4, progress_interval: int = 25, heartbeat_interval: int = 10,
+             selected_entity_ids: list[str] | None = None) -> int:
     """Report invalid HA Docs links without changing Home Assistant config."""
     if concurrency < 1:
         raise ValueError("concurrency must be at least 1")
@@ -374,11 +397,35 @@ def check_ha(repo: pathlib.Path, api: CoreApi, github_base: str, report: bool, a
     headings = collect_headings(repo)
     detailed_headings = headings_with_text(repo)
     index = entity_index_targets(repo)
-    failures = raised = healthy = removal_attempts = 0
-    entity_ids = api.entity_ids()
+    failures = raised = healthy = removal_attempts = skipped_missing_config = 0
+    if selected_entity_ids is None:
+        entity_ids = api.entity_ids()
+        scan_kind = "full"
+    else:
+        entity_ids = sorted(set(selected_entity_ids))
+        scan_kind = "targeted"
+        # CoreApi needs one state read to obtain an automation's immutable
+        # config id.  Test doubles and callers that already know the id need
+        # not implement this optional convenience method.
+        prepare = getattr(api, "prepare_entity", None)
+        if prepare is not None:
+            live_ids = []
+            for entity_id in entity_ids:
+                try:
+                    if prepare(entity_id):
+                        live_ids.append(entity_id)
+                    else:
+                        LOGGER.info("[ha] Docs-link targeted check skipped: entity=%s reason=not-automation-or-script", entity_id)
+                except CoreApiError as exc:
+                    if exc.status == 404:
+                        LOGGER.info("[ha] Docs-link targeted check skipped: entity=%s reason=entity-missing", entity_id)
+                        audit(audit_file, entity_id=entity_id, outcome="skipped-missing-entity")
+                        continue
+                    raise
+            entity_ids = live_ids
     LOGGER.info(
-        "[ha] Docs-link Repair scan started: entities=%d report_only=%s concurrency=%d progress_every=%d heartbeat_every=%ds",
-        len(entity_ids), report, concurrency, progress_interval, heartbeat_interval,
+        "[ha] Docs-link Repair scan started: kind=%s entities=%d report_only=%s concurrency=%d progress_every=%d heartbeat_every=%ds",
+        scan_kind, len(entity_ids), report, concurrency, progress_interval, heartbeat_interval,
     )
 
     def read_config(entity_id: str):
@@ -414,6 +461,21 @@ def check_ha(repo: pathlib.Path, api: CoreApi, github_base: str, report: bool, a
     for entity_id in entity_ids:
         config, read_error = results[entity_id]
         if read_error is not None:
+            if isinstance(read_error, CoreApiError) and read_error.status == 404:
+                # A registry state can outlive its storage configuration after
+                # an upgrade or manual deletion.  It is neither a bad Docs
+                # link nor a failed scan; clean any old HA Docs issue and let
+                # Home Assistant own the stale-record cleanup.
+                skipped_missing_config += 1
+                LOGGER.info("[ha] Docs-link config skipped: entity=%s reason=configuration-missing", entity_id)
+                audit(audit_file, entity_id=entity_id, outcome="skipped-missing-config")
+                if report:
+                    try:
+                        api.call_service("repairs", "remove", {"issue_id": repair_issue_id(entity_id)})
+                        removal_attempts += 1
+                    except RuntimeError:
+                        pass
+                continue
             LOGGER.warning("[ha] Docs-link config read failed: entity=%s error=%s", entity_id, read_error)
             audit(audit_file, entity_id=entity_id, outcome="failed", reason=f"configuration read failed: {read_error}")
             failures += 1
@@ -451,8 +513,8 @@ def check_ha(repo: pathlib.Path, api: CoreApi, github_base: str, report: bool, a
         audit(audit_file, entity_id=entity_id, outcome="repair-raised", reason=outcome, repair_rule=rule)
         LOGGER.warning("[ha] Repair raised: entity=%s rule=%s location=Settings > System > Repairs", entity_id, rule or "manual-review")
     LOGGER.info(
-        "[ha] Docs-link Repair scan complete: healthy=%d repairs_raised=%d repair_removals_requested=%d failures=%d",
-        healthy, raised, removal_attempts, failures,
+        "[ha] Docs-link Repair scan complete: healthy=%d repairs_raised=%d repair_removals_requested=%d skipped_missing_config=%d failures=%d",
+        healthy, raised, removal_attempts, skipped_missing_config, failures,
     )
     return failures
 
@@ -468,6 +530,8 @@ def main() -> int:
     ap.add_argument("--scan-concurrency", type=int, default=int(os.getenv("HA_DOCS_SCAN_CONCURRENCY", "4")))
     ap.add_argument("--progress-interval", type=int, default=int(os.getenv("HA_DOCS_PROGRESS_INTERVAL", "25")))
     ap.add_argument("--heartbeat-interval", type=int, default=int(os.getenv("HA_DOCS_HEARTBEAT_INTERVAL", "10")))
+    ap.add_argument("--entity-id", action="append", dest="entity_ids", metavar="ENTITY_ID",
+                    help="check only this automation or script; repeatable")
     ap.add_argument("--github-base", help="repository blob URL prefix, e.g. https://github.com/o/r/blob/main")
     ap.add_argument("--ha-api", default=os.getenv("HA_API_URL", "http://supervisor/core/api"))
     ap.add_argument("--audit-file", type=pathlib.Path, default=pathlib.Path(os.getenv("HA_DOC_LINK_AUDIT", "/data/doc-link-repairs.jsonl")))
@@ -487,7 +551,7 @@ def main() -> int:
         if not token:
             ap.error("--ha requires SUPERVISOR_TOKEN")
         return check_ha(args.repo, CoreApi(args.ha_api, token), args.github_base, args.report, args.audit_file,
-                        args.scan_concurrency, args.progress_interval, args.heartbeat_interval)
+                        args.scan_concurrency, args.progress_interval, args.heartbeat_interval, args.entity_ids)
     return check_source(args.repo)
 
 

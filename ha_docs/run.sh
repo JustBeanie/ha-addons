@@ -10,6 +10,8 @@ REPAIR_SCAN_ON_START=$(bashio::config 'repair_scan_on_start')
 REPAIR_SCAN_CONCURRENCY=$(bashio::config 'repair_scan_concurrency')
 REPAIR_PROGRESS_INTERVAL=$(bashio::config 'repair_progress_interval')
 REPAIR_SCAN_HEARTBEAT_INTERVAL=$(bashio::config 'repair_scan_heartbeat_interval')
+WATCH_ENTITY_UPDATES=$(bashio::config 'watch_entity_updates')
+ENTITY_UPDATE_DEBOUNCE=$(bashio::config 'entity_update_debounce')
 LOG_LEVEL=$(bashio::config 'log_level')
 
 case "${LOG_LEVEL}" in
@@ -62,6 +64,7 @@ readonly REPO_DIR=/data/repo
 readonly SITE_DIR=/data/site
 readonly STAMP_FILE=/data/.last_build
 readonly DOC_LINK_AUDIT=/data/doc-link-repairs.jsonl
+readonly DOC_LINK_READY=/data/.doc-link-checker-ready
 
 # The built site is cached against the commit it came from AND the builder that
 # produced it. Keying on the commit alone was a bug: /data survives an image
@@ -146,6 +149,37 @@ reconcile_ha_docs_links() {
         --github-base "${base}" "${REPO_DIR}"
 }
 
+start_entity_update_watcher() {
+    if [ "${REPORT_DOC_LINK_REPAIRS}" != "true" ] || [ "${WATCH_ENTITY_UPDATES}" != "true" ]; then
+        log_info "Targeted entity-update Docs-link checks are disabled"
+        return 0
+    fi
+    case "${REPO}" in
+        https://github.com/*.git)
+            local base="${REPO%.git}/blob/${BRANCH}"
+            ;;
+        https://github.com/*)
+            local base="${REPO}/blob/${BRANCH}"
+            ;;
+        *)
+            log_warning "Targeted entity-update Docs-link checks require a GitHub repository URL"
+            return 1
+            ;;
+    esac
+    log_info "Starting targeted automation/script Docs-link watcher: debounce=${ENTITY_UPDATE_DEBOUNCE}s"
+    HA_DOCS_REPO_DIR="${REPO_DIR}" \
+        HA_DOCS_GITHUB_BASE="${base}" \
+        HA_DOC_LINK_AUDIT="${DOC_LINK_AUDIT}" \
+        HA_DOCS_READY_FILE="${DOC_LINK_READY}" \
+        HA_DOCS_LOG_LEVEL="${LOG_LEVEL}" \
+        HA_DOCS_ENTITY_DEBOUNCE="${ENTITY_UPDATE_DEBOUNCE}" \
+        HA_DOCS_SCAN_CONCURRENCY="${REPAIR_SCAN_CONCURRENCY}" \
+        HA_DOCS_PROGRESS_INTERVAL="${REPAIR_PROGRESS_INTERVAL}" \
+        HA_DOCS_HEARTBEAT_INTERVAL="${REPAIR_SCAN_HEARTBEAT_INTERVAL}" \
+        python3 /opt/ha_docs/entity_watch.py &
+    ENTITY_WATCHER_PID=$!
+}
+
 # One pull + conditional rebuild. Returns non-zero only on hard failure.
 refresh() {
     local reason=$1 started_at=$SECONDS
@@ -155,15 +189,16 @@ refresh() {
         return 1
     fi
 
-    # This runs on add-on start and after every successful pull, including an
-    # unchanged commit. It validates live descriptions against the freshly
-    # pulled source before a static build is published.
+    # Source validation is cheap and always runs.  The full HA reconciliation
+    # below runs only at startup or when the source/builder changed; ordinary
+    # entity updates are handled one-at-a-time by entity_watch.py.
     if ! python3 /opt/ha_docs/check_anchors.py --source --log-level "${LOG_LEVEL}" "${REPO_DIR}"; then
         log_error "Source anchor check failed; continuing to serve the current site"
         return 1
     fi
+    touch "${DOC_LINK_READY}"
 
-    local sha stamp previous
+    local sha stamp previous source_changed=false
     sha=$(git -C "${REPO_DIR}" rev-parse HEAD)
     stamp="${sha} ${BUILDER_ID}"
     previous=$(cat "${STAMP_FILE}" 2>/dev/null || true)
@@ -171,6 +206,7 @@ refresh() {
     if [ "${stamp}" = "${previous}" ] && [ -d "${SITE_DIR}" ]; then
         log_debug "Docs source unchanged: commit=${sha:0:7}"
     else
+        source_changed=true
         log_info "Building docs: commit=${sha:0:7} builder=${BUILDER_ID:0:7}"
         if build_site; then
             echo "${stamp}" > "${STAMP_FILE}"
@@ -182,9 +218,13 @@ refresh() {
     fi
 
     if [ "${reason}" != "startup-skipped" ]; then
-        if ! reconcile_ha_docs_links; then
-            log_error "HA Docs-link Repair scan completed with failures"
-            return 1
+        if [ "${reason}" = "startup" ] || [ "${source_changed}" = "true" ]; then
+            if ! reconcile_ha_docs_links; then
+                log_error "HA Docs-link Repair scan completed with failures"
+                return 1
+            fi
+        else
+            log_debug "HA Docs-link Repair full scan skipped: source unchanged; targeted watcher is active"
         fi
     else
         log_info "HA Docs-link Repair scan skipped by repair_scan_on_start=false"
@@ -225,7 +265,9 @@ refresh_worker() {
 log_info "Starting background refresh and Docs-link Repair worker"
 refresh_worker &
 readonly WORKER_PID=$!
+ENTITY_WATCHER_PID=""
+start_entity_update_watcher || log_warning "Targeted entity-update Docs-link watcher did not start"
 
-trap 'kill "${WORKER_PID}" "${NGINX_PID}" "${ANNO_PID}" 2>/dev/null; exit 0' SIGTERM SIGINT
+trap 'kill "${WORKER_PID}" "${NGINX_PID}" "${ANNO_PID}" ${ENTITY_WATCHER_PID:+"${ENTITY_WATCHER_PID}"} 2>/dev/null; exit 0' SIGTERM SIGINT
 
 wait "${WORKER_PID}"
