@@ -41,6 +41,23 @@ class FakeApi:
         self.configs[entity_id] = copy.deepcopy(config)
 
 
+class RoutingCoreApi(CHECK.CoreApi):
+    """Exercise config-ID routing without making an HTTP request."""
+
+    def __init__(self):
+        super().__init__("http://example/api", "token")
+        self.calls = []
+
+    def request(self, method, path, body=None):
+        self.calls.append((method, path, body))
+        if path == "states":
+            return [
+                {"entity_id": "automation.example", "attributes": {"id": "1740000000001"}},
+                {"entity_id": "script.example", "attributes": {}},
+            ]
+        return {"alias": "Fixture", "sequence": []}
+
+
 class CheckAnchorsTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -103,6 +120,14 @@ class CheckAnchorsTests(unittest.TestCase):
         failures, api = self.reconcile({"script.conflict": self.config(marker="Docs:")}, conflict="script.conflict")
         self.assertEqual(failures, 1)
         self.assertEqual(api.writes, [])
+
+    def test_core_api_uses_automation_config_id_and_script_key(self):
+        api = RoutingCoreApi()
+        self.assertEqual(api.entity_ids(), ["automation.example", "script.example"])
+        api.get_config("automation.example")
+        api.set_config("script.example", {"sequence": []})
+        self.assertIn(("GET", "config/automation/config/1740000000001", None), api.calls)
+        self.assertIn(("POST", "config/script/config/example", {"sequence": []}), api.calls)
 
 
 if __name__ == "__main__":

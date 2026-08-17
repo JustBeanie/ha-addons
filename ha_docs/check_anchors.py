@@ -221,6 +221,7 @@ class CoreApi:
     def __init__(self, base_url: str, token: str):
         self.base_url = base_url.rstrip("/")
         self.token = token
+        self.config_identifiers: dict[str, str] = {}
 
     def request(self, method: str, path: str, body=None):
         data = None if body is None else json.dumps(body).encode("utf-8")
@@ -237,17 +238,34 @@ class CoreApi:
 
     def entity_ids(self) -> list[str]:
         states = self.request("GET", "states")
-        return sorted(s["entity_id"] for s in states if s.get("entity_id", "").startswith(("automation.", "script.")))
+        entity_ids = []
+        for state in states:
+            entity_id = state.get("entity_id", "")
+            if not entity_id.startswith(("automation.", "script.")):
+                continue
+            # Automation editor URLs use the immutable config ``id`` rather
+            # than the registry object_id. Scripts use their storage key.
+            if entity_id.startswith("automation."):
+                config_id = state.get("attributes", {}).get("id")
+                if not config_id:
+                    raise RuntimeError(f"automation {entity_id} has no configuration id")
+                self.config_identifiers[entity_id] = str(config_id)
+            else:
+                self.config_identifiers[entity_id] = entity_id.split(".", 1)[1]
+            entity_ids.append(entity_id)
+        return sorted(entity_ids)
 
     def get_config(self, entity_id: str) -> dict:
         domain, object_id = entity_id.split(".", 1)
-        payload = self.request("GET", f"config/{domain}/config/{object_id}")
+        config_id = self.config_identifiers.get(entity_id, object_id)
+        payload = self.request("GET", f"config/{domain}/config/{config_id}")
         # The endpoint may return either config directly or its normal envelope.
         return payload.get("config", payload)
 
     def set_config(self, entity_id: str, config: dict) -> None:
         domain, object_id = entity_id.split(".", 1)
-        self.request("POST", f"config/{domain}/config/{object_id}", config)
+        config_id = self.config_identifiers.get(entity_id, object_id)
+        self.request("POST", f"config/{domain}/config/{config_id}", config)
 
 
 def audit(path: pathlib.Path, **record) -> None:
@@ -359,5 +377,4 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(1 if main() else 0)
-
 
