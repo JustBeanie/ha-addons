@@ -10,7 +10,7 @@ import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "ha_docs"))
-SPEC = importlib.util.spec_from_file_location("check_anchors", ROOT / "scripts" / "check_anchors.py")
+SPEC = importlib.util.spec_from_file_location("check_anchors", ROOT / "ha_docs" / "check_anchors.py")
 CHECK = importlib.util.module_from_spec(SPEC)
 assert SPEC.loader
 SPEC.loader.exec_module(CHECK)
