@@ -20,6 +20,7 @@ only ever pulls.
 | `git_token` | *(unset)* | Personal access token. Only needed for a private repo; never written to the log. |
 | `todo_entity` | *(unset)* | To-do list that notes are mirrored onto, e.g. `todo.docs_review`. Leave empty to keep notes inside the docs site. |
 | `report_doc_link_repairs` | `true` | Raise a Home Assistant Repairs issue for each invalid automation/script Docs link. Requires Spook. Never changes entity descriptions. |
+| `log_level` | `info` | Add-on verbosity: `trace`, `debug`, `info`, `warning`, or `error`. |
 
 ### Documentation-link repair reporting (Spook required)
 
@@ -28,6 +29,8 @@ Spook's `repairs.create` and `repairs.remove` actions to raise or clear persiste
 Home Assistant Repairs dashboard. It only reports the entity, failure, and suggested repair rule;
 it never changes an automation or script description. Each issue includes the link it found and the
 exact marker or URL change to make when the target is unambiguous.
+
+Every scan logs its start, progress every 25 entities, each raised repair, and a final healthy/raised/failure summary at `info` level. Set `log_level` to `debug` for additional refresh and build detail.
 
 ### Private repositories
 

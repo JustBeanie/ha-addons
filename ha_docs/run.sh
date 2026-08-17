@@ -6,6 +6,9 @@ REPO=$(bashio::config 'repository')
 BRANCH=$(bashio::config 'branch')
 INTERVAL=$(bashio::config 'poll_interval')
 REPORT_DOC_LINK_REPAIRS=$(bashio::config 'report_doc_link_repairs')
+LOG_LEVEL=$(bashio::config 'log_level')
+
+bashio::log.level "${LOG_LEVEL}"
 
 export SITE_NAME
 SITE_NAME=$(bashio::config 'site_name')

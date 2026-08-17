@@ -325,8 +325,12 @@ def check_ha(repo: pathlib.Path, api: CoreApi, github_base: str, report: bool, a
     headings = collect_headings(repo)
     detailed_headings = headings_with_text(repo)
     index = entity_index_targets(repo)
-    failures = raised = cleared = 0
-    for entity_id in api.entity_ids():
+    failures = raised = healthy = 0
+    entity_ids = api.entity_ids()
+    print(f"[ha] starting Docs-link scan for {len(entity_ids)} automations/scripts (report-only; Spook Repairs)")
+    for position, entity_id in enumerate(entity_ids, start=1):
+        if position == 1 or position % 25 == 0 or position == len(entity_ids):
+            print(f"[ha] progress {position}/{len(entity_ids)}: checking {entity_id}")
         try:
             config = api.get_config(entity_id)
         except RuntimeError as exc:
@@ -338,10 +342,10 @@ def check_ha(repo: pathlib.Path, api: CoreApi, github_base: str, report: bool, a
             entity_id, config, repo, github_base, headings, detailed_headings, index
         )
         if outcome == "valid":
+            healthy += 1
             if report:
                 try:
                     api.call_service("repairs", "remove", {"issue_id": repair_issue_id(entity_id)})
-                    cleared += 1
                 except RuntimeError:
                     # No pre-existing issue is normal; the remove action is
                     # deliberately best-effort and must not mark a valid link bad.
@@ -362,8 +366,8 @@ def check_ha(repo: pathlib.Path, api: CoreApi, github_base: str, report: bool, a
             continue
         raised += 1
         audit(audit_file, entity_id=entity_id, outcome="repair-raised", reason=outcome, repair_rule=rule)
-        print(f"HA DOC LINK {entity_id}: repair raised ({rule or 'manual review'})")
-    print(f"\n[ha] documentation links checked; {raised} repairs raised, {cleared} cleared, {failures} failures")
+        print(f"[ha] REPAIR RAISED {entity_id}: {rule or 'manual review'} — see Settings > System > Repairs")
+    print(f"\n[ha] scan complete: {healthy} healthy, {raised} Repairs raised, {failures} scan failures")
     return failures
 
 

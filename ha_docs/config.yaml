@@ -1,7 +1,7 @@
 name: "HA Docs"
 slug: "ha_docs"
 description: "Serves a git repo of Markdown as a searchable MkDocs site behind HA ingress."
-version: "1.6.1"
+version: "1.6.2"
 url: "https://github.com/JustBeanie/ha-addons"
 
 arch:
@@ -32,6 +32,7 @@ options:
   site_name: "Docs"
   todo_entity: ""
   report_doc_link_repairs: true
+  log_level: "info"
 
 schema:
   repository: "url"
@@ -46,3 +47,6 @@ schema:
   # Requires the Spook integration. Raise a Repairs issue for every docs-link
   # candidate; descriptions are never changed automatically.
   report_doc_link_repairs: "bool"
+  # Set debug to see add-on refresh/build detail; the Docs-link scan always
+  # emits start, progress, raised-repair, and summary lines at info level.
+  log_level: "list(trace|debug|info|warning|error)"
