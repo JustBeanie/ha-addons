@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.8.2 - 2026-08-16
+
+Targeted, report-only Docs-link validation with quieter runtime behavior.
+
+- HA Docs now validates one affected automation or script after a non-runtime
+  entity update, rather than repeating a whole-instance scan for that change.
+  Full reconciliation remains at add-on start and after a documentation-source
+  change.
+- Script execution activity (`off`/`on` transitions and last-run metadata) is
+  ignored, so running an automation or script does not trigger a Docs-link
+  check.
+- A stale registry entity whose configuration endpoint returns 404 is recorded
+  as `skipped-missing-config`, any prior HA Docs Repair is cleared, and the
+  refresh worker continues instead of reporting a failed scan.
+- Added `watch_entity_updates` and `entity_update_debounce` options, both
+  enabled by default, plus targeted-check lifecycle logs.
+
 ## 1.3.0 - 2026-08-07
 
 Clearing notes, which 1.2.0 could only do one highlight at a time.
