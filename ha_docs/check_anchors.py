@@ -307,6 +307,20 @@ def repair_issue_id(entity_id: str) -> str:
     return "ha_docs_link_" + re.sub(r"[^a-z0-9_]+", "_", entity_id.casefold())
 
 
+def repair_instruction(entity_id: str, config: dict, outcome: str, replacement: str | None, rule: str | None) -> str:
+    """Human-facing, report-only remediation text for a Spook Repairs issue."""
+    link = DOCS_RE.search(config.get("description", ""))
+    found = f"`{link.group('marker')} {link.group('url')}`" if link else "no recognizable Docs link"
+    if rule == "legacy-marker":
+        action = "Replace `Docs:` with `📖 Docs:`; leave the URL and every other field unchanged."
+    elif rule in {"entity-index", "unique-heading"} and replacement:
+        proposed = DOCS_RE.search(replacement).group("url")
+        action = f"Replace the current Docs URL with `{proposed}`; leave every other field unchanged."
+    else:
+        action = "Manually add exactly one valid `📖 Docs:` URL that points to the documented entity section."
+    return f"Entity: `{entity_id}`\n\nFound: {found}\n\nWhat to fix: {action}\n\nDetection: {outcome}. HA Docs did not modify this entity."
+
+
 def check_ha(repo: pathlib.Path, api: CoreApi, github_base: str, report: bool, audit_file: pathlib.Path) -> int:
     headings = collect_headings(repo)
     detailed_headings = headings_with_text(repo)
@@ -336,8 +350,8 @@ def check_ha(repo: pathlib.Path, api: CoreApi, github_base: str, report: bool, a
         try:
             api.call_service("repairs", "create", {
                 "issue_id": repair_issue_id(entity_id),
-                "title": "HA Docs link needs repair",
-                "description": f"`{entity_id}`: {outcome}. Suggested rule: {rule or 'manual review'}. The HA Docs add-on did not modify this entity.",
+                "title": f"HA Docs link needs repair: {entity_id}",
+                "description": repair_instruction(entity_id, config, outcome, replacement, rule),
                 "severity": "warning",
                 "persistent": True,
             })

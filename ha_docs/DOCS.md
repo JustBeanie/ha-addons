@@ -26,7 +26,8 @@ only ever pulls.
 Install [Spook](https://spook.boo/) before enabling `report_doc_link_repairs`. HA Docs uses
 Spook's `repairs.create` and `repairs.remove` actions to raise or clear persistent issues in the
 Home Assistant Repairs dashboard. It only reports the entity, failure, and suggested repair rule;
-it never changes an automation or script description.
+it never changes an automation or script description. Each issue includes the link it found and the
+exact marker or URL change to make when the target is unambiguous.
 
 ### Private repositories
 
