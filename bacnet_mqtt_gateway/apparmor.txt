@@ -1,0 +1,44 @@
+#include <tunables/global>
+
+profile bacnet_mqtt_gateway flags=(attach_disconnected,mediate_deleted) {
+  #include <abstractions/base>
+
+  # The container mount namespace limits the visible filesystem to the app,
+  # its private configuration, and its persistent data volume.
+  file,
+
+  network inet stream,
+  network inet6 stream,
+  network inet dgram,
+  network inet6 dgram,
+  network unix stream,
+  network unix dgram,
+
+  signal (send) set=(kill,term,int,hup,cont),
+  signal (receive),
+
+  # S6 Overlay and Bashio supplied by the Home Assistant base image.
+  /init ix,
+  /bin/** ix,
+  /usr/bin/** ix,
+  /run/{s6,s6-rc*,service}/** ix,
+  /package/** ix,
+  /command/** ix,
+  /etc/services.d/** rwix,
+  /etc/cont-init.d/** rwix,
+  /etc/cont-finish.d/** rwix,
+  /run/{,**} rwk,
+  /usr/lib/bashio/** ix,
+
+  # Gateway code and native Node.js modules.
+  /opt/bacnet-mqtt-gateway/** r,
+  /opt/bacnet-mqtt-gateway/**.node mr,
+
+  # Home Assistant app state and app-specific user configuration.
+  /data/ rw,
+  /data/** rwk,
+  /config/ rw,
+  /config/** rwk,
+  /tmp/ rw,
+  /tmp/** rwk,
+}

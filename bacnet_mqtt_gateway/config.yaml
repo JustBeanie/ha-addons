@@ -1,0 +1,79 @@
+name: "BACnet MQTT Gateway"
+version: "2.0.0"
+slug: "bacnet_mqtt_gateway"
+description: >-
+  Poll BACnet/IP devices, publish their data to MQTT, and expose a Home Assistant
+  ingress console for discovery and configuration.
+url: "https://github.com/JustBeanie/ha-addons/tree/main/bacnet_mqtt_gateway"
+arch:
+  - aarch64
+  - amd64
+startup: application
+boot: auto
+init: false
+stage: experimental
+host_network: true
+ingress: true
+ingress_port: 18082
+ingress_entry: admin/
+panel_icon: mdi:router-network
+panel_title: BACnet Gateway
+panel_admin: true
+apparmor: true
+watchdog: "http://[HOST]:18082/health"
+backup: cold
+timeout: 15
+services:
+  - "mqtt:want"
+map:
+  - type: app_config
+    read_only: false
+    path: /config
+options:
+  mqtt_mode: supervisor
+  mqtt_gateway_id: bacnet-gateway
+  mqtt_external_port: 1883
+  mqtt_tls: false
+  mqtt_tls_verify: true
+  bacnet_config_directory: devices
+  bacnet_interface: 0.0.0.0
+  bacnet_broadcast_address: 255.255.255.255
+  bacnet_port: 47808
+  bacnet_apdu_timeout: 10000
+  bacnet_max_segments: 112
+  bacnet_max_apdu: 5
+  polling_global_concurrency: 2
+  polling_object_concurrency: 4
+  polling_scheduler_tick_ms: 1000
+  polling_default_freshness_ms: 30000
+  polling_failure_threshold: 3
+  polling_base_backoff_ms: 5000
+  polling_max_backoff_ms: 120000
+  log_level: info
+schema:
+  mqtt_mode: "list(supervisor|external)"
+  mqtt_gateway_id: "match(^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$)"
+  mqtt_external_host: "str?"
+  mqtt_external_port: port
+  mqtt_external_username: "str?"
+  mqtt_external_password: "password?"
+  mqtt_tls: bool
+  mqtt_tls_verify: bool
+  mqtt_tls_ca_file: "str?"
+  mqtt_tls_cert_file: "str?"
+  mqtt_tls_key_file: "str?"
+  bacnet_config_directory: "str(1,255)"
+  bacnet_interface: "str(1,255)"
+  bacnet_broadcast_address: "str(1,255)"
+  bacnet_port: port
+  bacnet_apdu_timeout: "int(100,120000)"
+  bacnet_max_segments: "int(0,127)"
+  bacnet_max_apdu: "int(0,5)"
+  polling_global_concurrency: "int(1,64)"
+  polling_object_concurrency: "int(1,64)"
+  polling_scheduler_tick_ms: "int(100,60000)"
+  polling_default_freshness_ms: "int(1000,3600000)"
+  polling_failure_threshold: "int(1,100)"
+  polling_base_backoff_ms: "int(100,3600000)"
+  polling_max_backoff_ms: "int(100,86400000)"
+  log_level: "list(debug|info|warn|error)"

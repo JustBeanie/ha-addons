@@ -1,0 +1,79 @@
+configuration:
+  mqtt_mode:
+    name: MQTT connection mode
+    description: Use the MQTT service supplied by Supervisor or configure an external broker.
+  mqtt_gateway_id:
+    name: MQTT gateway ID
+    description: Stable identifier used in MQTT topics, client ID, and Home Assistant discovery IDs.
+  mqtt_external_host:
+    name: External MQTT host
+    description: Hostname or IP address required when MQTT connection mode is external.
+  mqtt_external_port:
+    name: External MQTT port
+    description: TCP port used when MQTT connection mode is external.
+  mqtt_external_username:
+    name: External MQTT username
+    description: Optional username used to authenticate to the external broker.
+  mqtt_external_password:
+    name: External MQTT password
+    description: Optional password used to authenticate to the external broker.
+  mqtt_tls:
+    name: External MQTT TLS
+    description: Use an encrypted MQTTS connection in external mode. Supervisor mode follows the advertised service setting.
+  mqtt_tls_verify:
+    name: Verify MQTT TLS certificate
+    description: Reject an MQTT broker certificate that cannot be validated or does not match its host.
+  mqtt_tls_ca_file:
+    name: MQTT CA file
+    description: Optional CA bundle path relative to the app configuration directory.
+  mqtt_tls_cert_file:
+    name: MQTT client certificate
+    description: Optional client certificate path relative to the app configuration directory.
+  mqtt_tls_key_file:
+    name: MQTT client private key
+    description: Optional client private-key path relative to the app configuration directory.
+  bacnet_config_directory:
+    name: BACnet device configuration directory
+    description: Writable directory relative to the app configuration folder in which device JSON files are stored.
+  bacnet_interface:
+    name: BACnet interface address
+    description: Local IPv4 address on which to listen, or 0.0.0.0 for all interfaces.
+  bacnet_broadcast_address:
+    name: BACnet broadcast address
+    description: Limited or directed IPv4 broadcast address used for BACnet discovery.
+  bacnet_port:
+    name: BACnet UDP port
+    description: BACnet/IP UDP port; 47808 is the standard BAC0 port.
+  bacnet_apdu_timeout:
+    name: BACnet APDU timeout
+    description: Time in milliseconds to wait for a BACnet APDU response.
+  bacnet_max_segments:
+    name: BACnet maximum segments
+    description: Maximum-segments value supplied to BACstack.
+  bacnet_max_apdu:
+    name: BACnet maximum APDU
+    description: Maximum-APDU enum supplied to BACstack.
+  polling_global_concurrency:
+    name: Global polling concurrency
+    description: Maximum number of device polling jobs that may execute concurrently.
+  polling_object_concurrency:
+    name: Object polling concurrency
+    description: Maximum number of object reads that may execute concurrently within a polling job.
+  polling_scheduler_tick_ms:
+    name: Polling scheduler interval
+    description: Time in milliseconds between scheduler evaluations.
+  polling_default_freshness_ms:
+    name: Default data freshness
+    description: Default time in milliseconds before cached BACnet data is considered stale.
+  polling_failure_threshold:
+    name: Polling failure threshold
+    description: Consecutive failures required before the device circuit breaker opens.
+  polling_base_backoff_ms:
+    name: Initial polling backoff
+    description: Initial retry delay in milliseconds after a polling failure.
+  polling_max_backoff_ms:
+    name: Maximum polling backoff
+    description: Maximum retry delay in milliseconds after repeated polling failures.
+  log_level:
+    name: Log level
+    description: Gateway application logging verbosity.
