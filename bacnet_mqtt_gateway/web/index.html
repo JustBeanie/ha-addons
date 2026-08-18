@@ -1,0 +1,524 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BACnet MQTT Gateway Admin</title>
+    <link rel="stylesheet" href="vendor/bootstrap.min.css">
+    <link rel="stylesheet" href="admin.css">
+</head>
+<body>
+<div id="app">
+    <div v-if="!tokenValid" class="auth-shell">
+        <div class="auth-card">
+            <div class="eyebrow">BACnet MQTT Gateway</div>
+            <h1 class="auth-title">Admin Sign In</h1>
+            <p class="auth-copy">Use your gateway credentials to access device discovery, runtime health, and BACnet write operations.</p>
+            <form @submit.prevent="login">
+                <div class="form-group">
+                    <label for="username">Username</label>
+                    <input id="username" v-model="loginForm.username" class="form-control" autocomplete="username">
+                </div>
+                <div class="form-group">
+                    <label for="password">Password</label>
+                    <input id="password" type="password" v-model="loginForm.password" class="form-control" autocomplete="current-password">
+                </div>
+                <button class="btn btn-primary btn-block" :disabled="loginLoading">
+                    <span v-if="loginLoading">Signing In...</span>
+                    <span v-else>Login</span>
+                </button>
+                <div v-if="loginError" class="alert alert-danger mt-3">{{ loginError }}</div>
+            </form>
+        </div>
+    </div>
+
+    <div v-else class="app-shell">
+        <header class="app-header">
+            <div class="container">
+                <div class="header-row">
+                    <div>
+                        <div class="eyebrow">BACnet MQTT Gateway</div>
+                        <h1 class="app-title">Operations Console</h1>
+                        <div v-if="trustIngress" class="header-meta">
+                            Authenticated by Home Assistant as <strong>{{ currentUser.username }}</strong>
+                        </div>
+                        <div v-else class="header-meta">
+                            Signed in as <strong>{{ currentUser.username }}</strong> ({{ currentUser.role }})
+                        </div>
+                    </div>
+                    <div class="header-actions">
+                        <button v-if="!trustIngress" class="btn btn-sm btn-outline-light" @click="openChangePassword">Change Password</button>
+                        <button v-if="!trustIngress" class="btn btn-sm btn-outline-light" @click="logout">Logout</button>
+                    </div>
+                </div>
+
+                <div class="status-grid">
+                    <div class="status-card" :class="health.status">
+                        <div class="status-label">Gateway Status</div>
+                        <div class="status-value">{{ health.status }}</div>
+                    </div>
+                    <div class="status-card">
+                        <div class="status-label">MQTT</div>
+                        <div class="status-value">{{ health.mqtt.connected ? 'connected' : 'disconnected' }}</div>
+                    </div>
+                    <div class="status-card">
+                        <div class="status-label">Configured Devices</div>
+                        <div class="status-value">{{ health.bacnet.configuredDevices || 0 }}</div>
+                    </div>
+                    <div class="status-card">
+                        <div class="status-label">Open Circuits</div>
+                        <div class="status-value">{{ health.runtime.openCircuits || 0 }}</div>
+                    </div>
+                    <div class="status-card">
+                        <div class="status-label">Degraded Devices</div>
+                        <div class="status-value">{{ health.runtime.degradedDevices || 0 }}</div>
+                    </div>
+                    <div class="status-card">
+                        <div class="status-label">Stale Objects</div>
+                        <div class="status-value">{{ health.runtime.staleObjects || 0 }}</div>
+                    </div>
+                </div>
+
+                <nav class="nav-strip">
+                    <button class="btn nav-btn" :class="{ active: state === 'whois' }" @click="showView('whois')">WhoIs</button>
+                    <button class="btn nav-btn" :class="{ active: state === 'objects' }" @click="showView('objects')">Object Scan</button>
+                    <button class="btn nav-btn" :class="{ active: state === 'configured' }" @click="showView('configured')">Configured</button>
+                    <button class="btn nav-btn" :class="{ active: state === 'runtime' }" @click="showView('runtime')">Runtime</button>
+                    <button class="btn nav-btn" :class="{ active: state === 'runtimeObjects' }" @click="showView('runtimeObjects')">Runtime Objects</button>
+                </nav>
+            </div>
+        </header>
+
+        <main class="container app-main">
+            <whois-panel v-if="state === 'whois'"></whois-panel>
+            <device-scan v-if="state === 'objects'" :can-write="canWrite"></device-scan>
+            <configured-devices v-if="state === 'configured'"></configured-devices>
+            <runtime-devices v-if="state === 'runtime'"></runtime-devices>
+            <runtime-objects v-if="state === 'runtimeObjects'"></runtime-objects>
+        </main>
+
+        <div v-if="changePasswordModal" class="modal-backdrop">
+            <div class="modal-card">
+                <h4>Change Password</h4>
+                <div v-if="changeError" class="alert alert-danger">{{ changeError }}</div>
+                <div v-if="changeSuccess" class="alert alert-success">{{ changeSuccess }}</div>
+                <div class="form-group">
+                    <label for="currentPassword">Current Password</label>
+                    <input id="currentPassword" type="password" v-model="changeForm.oldPassword" class="form-control" autocomplete="current-password">
+                </div>
+                <div class="form-group">
+                    <label for="newPassword">New Password</label>
+                    <input id="newPassword" type="password" v-model="changeForm.newPassword" class="form-control" autocomplete="new-password">
+                </div>
+                <div class="d-flex justify-content-end mt-3">
+                    <button class="btn btn-secondary mr-2" @click="closeChangePassword">Cancel</button>
+                    <button class="btn btn-primary" @click="submitChangePassword">Update</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script type="text/x-template" id="spinner-template">
+    <div class="d-flex justify-content-center py-3">
+        <div class="spinner-border spinner-accent" role="status"></div>
+    </div>
+</script>
+
+<script type="text/x-template" id="whois-template">
+    <section class="panel">
+        <div class="panel-header">
+            <div>
+                <div class="eyebrow">Discovery</div>
+                <h2 class="panel-title">Network Scan</h2>
+            </div>
+            <div>
+                <button v-if="!loading" class="btn btn-primary" @click="startScan">Scan Network</button>
+                <div v-else class="d-flex align-items-center">
+                    <button class="btn btn-primary" disabled>Scanning...</button>
+                    <button class="btn btn-outline-danger ml-2" @click="stopScan">Stop</button>
+                </div>
+            </div>
+        </div>
+        <p class="panel-copy">Runs a BACnet WhoIs scan and collects devices discovered during the five-second backend scan window.</p>
+        <div v-if="error" class="alert alert-warning">{{ error }}</div>
+        <table class="table table-dark mt-3" v-if="devices.length">
+            <thead>
+            <tr>
+                <th>Address</th>
+                <th>Device ID</th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr v-for="device in devices" :key="device.deviceId + '-' + device.address">
+                <td>{{ device.address }}</td>
+                <td>{{ device.deviceId }}</td>
+            </tr>
+            </tbody>
+        </table>
+        <div v-else-if="!loading" class="empty-state">No devices discovered yet.</div>
+    </section>
+</script>
+
+<script type="text/x-template" id="device-scan-template">
+    <section class="panel">
+        <div class="panel-header">
+            <div>
+                <div class="eyebrow">Objects</div>
+                <h2 class="panel-title">Device Object Scan</h2>
+            </div>
+        </div>
+        <p class="panel-copy">Read BACnet objects for a device by ID and IP address. Admin users can write object properties directly from this view.</p>
+
+        <form class="form-grid" @submit.prevent="scanDevice">
+            <div class="form-group">
+                <label for="scanDeviceId">Device ID</label>
+                <input id="scanDeviceId" v-model="deviceId" class="form-control">
+            </div>
+            <div class="form-group">
+                <label for="scanAddress">IP Address</label>
+                <input id="scanAddress" v-model="address" class="form-control">
+            </div>
+            <div class="form-group action-group">
+                <button class="btn btn-primary" :disabled="loading">Read Objects</button>
+                <button
+                    v-if="demoScanAvailable"
+                    class="btn btn-outline-light ml-2"
+                    type="button"
+                    :disabled="loading"
+                    @click="loadDemoScan">
+                    Load Demo Scan
+                </button>
+            </div>
+        </form>
+
+        <div v-if="loading">
+            <spinner></spinner>
+        </div>
+        <div v-if="error" class="alert alert-danger">{{ error }}</div>
+        <div v-if="diagnosticsError" class="alert alert-warning">{{ diagnosticsError }}</div>
+
+        <div v-if="!loading && objects.length" class="diagnostics-bar">
+            <div class="diagnostics-counts">
+                <span>Discovered <strong>{{ diagnosticsSummary.discovered }}</strong></span>
+                <span>Configured <strong>{{ diagnosticsSummary.configured }}</strong></span>
+                <span>Runtime <strong>{{ diagnosticsSummary.runtime }}</strong></span>
+                <span>Discovered only <strong>{{ diagnosticsSummary.discoveredOnly }}</strong></span>
+            </div>
+            <div class="diagnostics-actions">
+                <select v-model="diagnosticsFilter" class="form-control form-control-sm diagnostics-filter" aria-label="Object diagnostics filter">
+                    <option value="all">All objects</option>
+                    <option value="discoveredOnly">Discovered only</option>
+                    <option value="configured">Configured</option>
+                    <option value="runtime">Runtime</option>
+                </select>
+                <button class="btn btn-sm btn-outline-light" type="button" @click="diagnosticsExpanded = !diagnosticsExpanded">
+                    {{ diagnosticsExpanded ? 'Hide Diagnostics' : 'Show Diagnostics' }}
+                </button>
+            </div>
+        </div>
+
+        <div v-if="diagnosticsLoading" class="text-muted small mt-2">Loading diagnostics...</div>
+
+        <div v-if="diagnosticsExpanded && objects.length" class="diagnostics-panel">
+            <div>
+                <div class="diagnostics-label">Configured but not in latest scan</div>
+                <div v-if="diagnosticsSummary.configuredNotDiscovered.length" class="diagnostics-list">
+                    <span v-for="key in diagnosticsSummary.configuredNotDiscovered" :key="'cfg-' + key" class="diagnostics-token">{{ key }}</span>
+                </div>
+                <div v-else class="text-muted small">None</div>
+            </div>
+            <div>
+                <div class="diagnostics-label">Runtime but not in latest scan</div>
+                <div v-if="diagnosticsSummary.runtimeNotDiscovered.length" class="diagnostics-list">
+                    <span v-for="key in diagnosticsSummary.runtimeNotDiscovered" :key="'rt-' + key" class="diagnostics-token">{{ key }}</span>
+                </div>
+                <div v-else class="text-muted small">None</div>
+            </div>
+        </div>
+
+        <div v-if="!loading && objects.length && canWrite" class="polling-config">
+            <div>
+                <div class="eyebrow">Polling</div>
+                <h3 class="polling-title">Save selected objects</h3>
+                <p class="panel-copy">Selected objects are persisted and published through Home Assistant MQTT Discovery after their first successful poll.</p>
+            </div>
+            <div class="form-grid">
+                <div class="form-group">
+                    <label for="pollClass">Polling class</label>
+                    <select id="pollClass" v-model="pollClass" class="form-control">
+                        <option value="fast">Fast (5 seconds)</option>
+                        <option value="normal">Normal (15 seconds)</option>
+                        <option value="slow">Slow (60 seconds)</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="pollInterval">Custom interval (ms)</label>
+                    <input id="pollInterval" v-model="intervalMs" min="100" type="number" class="form-control" placeholder="Use class default">
+                </div>
+                <div class="form-group">
+                    <label for="pollFreshness">Freshness window (ms)</label>
+                    <input id="pollFreshness" v-model="freshnessMs" min="100" type="number" class="form-control" placeholder="Twice the interval">
+                </div>
+                <div class="form-group action-group">
+                    <button class="btn btn-primary" type="button" :disabled="saving" @click="saveForPolling">
+                        {{ saving ? 'Saving...' : 'Save Polling Configuration' }}
+                    </button>
+                </div>
+            </div>
+            <div v-if="saveError" class="alert alert-danger mt-3">{{ saveError }}</div>
+            <div v-if="saveSuccess" class="alert alert-success mt-3">{{ saveSuccess }}</div>
+        </div>
+
+        <table class="table table-dark mt-3" v-if="!loading && filteredObjects.length">
+            <thead>
+            <tr>
+                <th v-if="canWrite">Poll</th>
+                <th>Object</th>
+                <th>Name</th>
+                <th>Description</th>
+                <th>State</th>
+                <th>Diagnostics</th>
+                <th>Action</th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr v-for="object in filteredObjects" :key="object.objectId.type + '-' + object.objectId.instance">
+                <td v-if="canWrite">
+                    <input v-model="object.selected" type="checkbox" :aria-label="'Poll ' + object.objectKey">
+                </td>
+                <td>{{ object.objectId.type }} / {{ object.objectId.instance }}</td>
+                <td>{{ object.name || '-' }}</td>
+                <td>{{ object.description || '-' }}</td>
+                <td>
+                    <span
+                        v-for="label in objectStatusLabels(object)"
+                        :key="object.objectKey + '-' + label"
+                        class="state-badge"
+                        :class="statusClass(label)">
+                        {{ label }}
+                    </span>
+                </td>
+                <td>
+                    <details class="object-diagnostics">
+                        <summary>Details</summary>
+                        <pre>{{ diagnosticPayload(object) }}</pre>
+                    </details>
+                </td>
+                <td>
+                    <button v-if="canWrite" class="btn btn-sm btn-info" @click="openWriteForm(object)">Write</button>
+                    <span v-else class="text-muted small">Admin only</span>
+                </td>
+            </tr>
+            </tbody>
+        </table>
+        <div v-else-if="!loading && objects.length" class="empty-state">No objects match the selected diagnostics filter.</div>
+        <div v-else-if="!loading" class="empty-state">No objects loaded.</div>
+
+        <object-write-form
+            v-if="selectedObject"
+            :device-id="selectedObject.deviceId"
+            :object-type="selectedObject.objectType"
+            :object-instance="selectedObject.objectInstance"
+            :initial-object-name="selectedObject.initialObjectName"
+            @close="closeWriteForm"
+            @success="closeWriteForm">
+        </object-write-form>
+    </section>
+</script>
+
+<script type="text/x-template" id="configured-devices-template">
+    <section class="panel">
+        <div class="panel-header">
+            <div>
+                <div class="eyebrow">Configuration</div>
+                <h2 class="panel-title">Configured Devices</h2>
+            </div>
+            <button class="btn btn-primary" @click="load" :disabled="loading">Refresh</button>
+        </div>
+        <p class="panel-copy">Shows the polling metadata currently registered in the gateway.</p>
+        <div v-if="loading">
+            <spinner></spinner>
+        </div>
+        <div v-if="error" class="alert alert-danger">{{ error }}</div>
+        <table class="table table-dark mt-3" v-if="!loading && devices.length">
+            <thead>
+            <tr>
+                <th>Device ID</th>
+                <th>Address</th>
+                <th>Class</th>
+                <th>Interval</th>
+                <th>Freshness</th>
+                <th>Schedule</th>
+                <th>Objects</th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr v-for="device in devices" :key="device.deviceId">
+                <td>{{ device.deviceId }}</td>
+                <td>{{ device.address || '-' }}</td>
+                <td>{{ device.pollClass || '-' }}</td>
+                <td>{{ device.intervalMs ? (device.intervalMs + ' ms') : '-' }}</td>
+                <td>{{ device.freshnessMs ? (device.freshnessMs + ' ms') : '-' }}</td>
+                <td>{{ device.schedule || '-' }}</td>
+                <td>{{ device.objectCount }}</td>
+            </tr>
+            </tbody>
+        </table>
+        <div v-else-if="!loading" class="empty-state">No configured devices found.</div>
+    </section>
+</script>
+
+<script type="text/x-template" id="runtime-devices-template">
+    <section class="panel">
+        <div class="panel-header">
+            <div>
+                <div class="eyebrow">Runtime</div>
+                <h2 class="panel-title">Device Runtime State</h2>
+            </div>
+            <button class="btn btn-primary" @click="load" :disabled="loading">Refresh</button>
+        </div>
+        <p class="panel-copy">Live persisted runtime status from SQLite, including circuit state, last success, and retry timing.</p>
+        <div v-if="loading">
+            <spinner></spinner>
+        </div>
+        <div v-if="error" class="alert alert-danger">{{ error }}</div>
+        <table class="table table-dark mt-3" v-if="!loading && devices.length">
+            <thead>
+            <tr>
+                <th>Device ID</th>
+                <th>Address</th>
+                <th>Circuit</th>
+                <th>Failures</th>
+                <th>Last Success</th>
+                <th>Next Eligible Poll</th>
+                <th>Last Error</th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr v-for="device in devices" :key="device.device_id">
+                <td>{{ device.device_id }}</td>
+                <td>{{ device.address || '-' }}</td>
+                <td>{{ device.circuit_state }}</td>
+                <td>{{ device.consecutive_failures }}</td>
+                <td>{{ formatTimestamp(device.last_success_at) }}</td>
+                <td>{{ formatTimestamp(device.next_eligible_poll_at) }}</td>
+                <td>{{ device.last_error || '-' }}</td>
+            </tr>
+            </tbody>
+        </table>
+        <div v-else-if="!loading" class="empty-state">No runtime state available.</div>
+    </section>
+</script>
+
+<script type="text/x-template" id="runtime-objects-template">
+    <section class="panel">
+        <div class="panel-header">
+            <div>
+                <div class="eyebrow">Runtime</div>
+                <h2 class="panel-title">Object Runtime State</h2>
+            </div>
+            <button class="btn btn-primary" @click="load" :disabled="loading || !deviceId">Refresh</button>
+        </div>
+        <p class="panel-copy">Live persisted object values from SQLite for one configured BACnet device.</p>
+
+        <form class="form-grid" @submit.prevent="load">
+            <div class="form-group">
+                <label for="runtimeObjectDeviceId">Device ID</label>
+                <input id="runtimeObjectDeviceId" v-model="deviceId" class="form-control">
+            </div>
+            <div class="form-group action-group">
+                <button class="btn btn-primary" :disabled="loading || !deviceId">Load Objects</button>
+            </div>
+        </form>
+
+        <div v-if="loading">
+            <spinner></spinner>
+        </div>
+        <div v-if="error" class="alert alert-danger">{{ error }}</div>
+        <table class="table table-dark mt-3 runtime-object-table" v-if="!loading && objects.length">
+            <thead>
+            <tr>
+                <th>Object Key</th>
+                <th>Name</th>
+                <th>Current Value</th>
+                <th>Freshness</th>
+                <th>Source</th>
+                <th>Last Update</th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr v-for="object in objects" :key="object.device_id + '-' + object.object_key">
+                <td>{{ object.object_key }}</td>
+                <td>{{ object.object_name || '-' }}</td>
+                <td>{{ formatValue(object.value) }}</td>
+                <td>{{ formatDuration(object.freshness_ms) }}</td>
+                <td>{{ object.source_status || '-' }}</td>
+                <td>{{ formatTimestamp(object.updated_at || object.acquired_at) }}</td>
+            </tr>
+            </tbody>
+        </table>
+        <div v-else-if="!loading && loaded" class="empty-state">No runtime object state available for this device.</div>
+        <div v-else-if="!loading" class="empty-state">Enter a device ID to load object state.</div>
+    </section>
+</script>
+
+<script type="text/x-template" id="object-write-form-template">
+    <div class="modal-backdrop">
+        <div class="modal-card modal-wide">
+            <div class="d-flex justify-content-between align-items-start">
+                <div>
+                    <div class="eyebrow">Write Property</div>
+                    <h4>Object {{ initialObjectName || (objectType + ':' + objectInstance) }}</h4>
+                    <p class="text-muted mb-0">Device ID: {{ deviceId }}</p>
+                </div>
+                <button class="close-button" @click="$emit('close')">&times;</button>
+            </div>
+
+            <div v-if="loading">
+                <spinner></spinner>
+            </div>
+
+            <div v-else>
+                <div class="form-group">
+                    <label :for="'propId-' + objectInstance">Property ID</label>
+                    <select :id="'propId-' + objectInstance" v-model="propertyId" class="form-control">
+                        <option v-for="prop in commonProperties" :key="prop.value" :value="prop.value">{{ prop.text }}</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label :for="'val-' + objectInstance">Value</label>
+                    <input :id="'val-' + objectInstance" v-model="valueToWrite" class="form-control">
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group col-md-6">
+                        <label :for="'appTag-' + objectInstance">BACnet Application Tag</label>
+                        <select :id="'appTag-' + objectInstance" v-model="bacnetApplicationTag" class="form-control">
+                            <option v-for="tag in commonAppTags" :key="String(tag.value)" :value="tag.value">{{ tag.text }}</option>
+                        </select>
+                    </div>
+                    <div class="form-group col-md-6">
+                        <label :for="'prio-' + objectInstance">Write Priority</label>
+                        <input :id="'prio-' + objectInstance" v-model="priority" min="1" max="16" type="number" class="form-control">
+                    </div>
+                </div>
+
+                <div class="d-flex justify-content-end">
+                    <button class="btn btn-secondary mr-2" @click="$emit('close')">Cancel</button>
+                    <button class="btn btn-primary" @click="submitWrite">Submit Write</button>
+                </div>
+
+                <div v-if="status === 'success'" class="alert alert-success mt-3">{{ message }}</div>
+                <div v-if="status === 'error'" class="alert alert-danger mt-3">{{ message }}</div>
+            </div>
+        </div>
+    </div>
+</script>
+
+<script src="vendor/vue.global.prod.js"></script>
+<script src="vendor/axios.min.js"></script>
+<script src="admin.js"></script>
+</body>
+</html>

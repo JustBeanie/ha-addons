@@ -1,0 +1,101 @@
+name: BACnet MQTT Gateway
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "bacnet_mqtt_gateway/**"
+      - ".github/workflows/bacnet-mqtt-gateway.yml"
+  pull_request:
+    paths:
+      - "bacnet_mqtt_gateway/**"
+      - ".github/workflows/bacnet-mqtt-gateway.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  app-lint:
+    name: Home Assistant App lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7.0.1
+      # v2.21 predates Supervisor's 2026.07 app_config rename. Lint a
+      # compatibility copy until the action publishes its updated schema; the
+      # Jest manifest test below validates the real, current manifest.
+      - name: Prepare linter compatibility copy
+        run: |
+          mkdir -p .lint
+          cp -a bacnet_mqtt_gateway .lint/bacnet_mqtt_gateway
+          sed -i 's/type: app_config/type: addon_config/' .lint/bacnet_mqtt_gateway/config.yaml
+      - name: Run Home Assistant App linter
+        uses: frenck/action-addon-linter@v2.21
+        with:
+          path: ./.lint/bacnet_mqtt_gateway
+
+  test:
+    name: Node.js ${{ matrix.node }} tests
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node:
+          - 22
+          - 24
+    defaults:
+      run:
+        working-directory: bacnet_mqtt_gateway
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7.0.1
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+          cache-dependency-path: bacnet_mqtt_gateway/package-lock.json
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Audit dependencies
+        run: npm audit --audit-level=high
+      - name: Run test suite with coverage gate
+        run: npm run test:coverage -- --runInBand
+
+  image:
+    name: Build ${{ matrix.arch }} image
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            platform: linux/amd64
+          - arch: aarch64
+            platform: linux/arm64
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7.0.1
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v4
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+      - name: Read app version
+        id: app
+        shell: bash
+        run: |
+          version="$(sed -n 's/^version: "\(.*\)"/\1/p' bacnet_mqtt_gateway/config.yaml)"
+          test -n "${version}"
+          echo "version=${version}" >> "${GITHUB_OUTPUT}"
+      - name: Build app image
+        uses: docker/build-push-action@v7
+        with:
+          context: ./bacnet_mqtt_gateway
+          platforms: ${{ matrix.platform }}
+          push: false
+          tags: local/bacnet-mqtt-gateway:${{ matrix.arch }}
+          build-args: |
+            BUILD_ARCH=${{ matrix.arch }}
+            BUILD_VERSION=${{ steps.app.outputs.version }}

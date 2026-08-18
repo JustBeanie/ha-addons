@@ -1,0 +1,53 @@
+{
+  "mqtt": {
+    "host": "MQTT_HOST",
+    "port": "MQTT_PORT",
+    "username": "MQTT_USERNAME",
+    "password": "MQTT_PASSWORD",
+    "gatewayId": "MQTT_GATEWAY_ID",
+    "tls": {
+      "enabled": "MQTT_TLS_ENABLED",
+      "caPath": "MQTT_TLS_CA_PATH",
+      "certPath": "MQTT_TLS_CERT_PATH",
+      "keyPath": "MQTT_TLS_KEY_PATH",
+      "rejectUnauthorized": "MQTT_TLS_REJECT_UNAUTHORIZED"
+    }
+  },
+  "bacnet": {
+    "configFolder": "BACNET_CONFIG_FOLDER",
+    "interface": "BACNET_INTERFACE",
+    "broadcastAddress": "BACNET_BROADCAST_ADDRESS",
+    "port": "BACNET_PORT",
+    "apduTimeout": "BACNET_APDU_TIMEOUT",
+    "maxSegments": "BACNET_MAX_SEGMENTS",
+    "maxApdu": "BACNET_MAX_APDU"
+  },
+  "polling": {
+    "globalConcurrency": "POLLING_GLOBAL_CONCURRENCY",
+    "objectConcurrency": "POLLING_OBJECT_CONCURRENCY",
+    "schedulerTickMs": "POLLING_SCHEDULER_TICK_MS",
+    "defaultFreshnessMs": "POLLING_DEFAULT_FRESHNESS_MS",
+    "failureThreshold": "POLLING_FAILURE_THRESHOLD",
+    "baseBackoffMs": "POLLING_BASE_BACKOFF_MS",
+    "maxBackoffMs": "POLLING_MAX_BACKOFF_MS"
+  },
+  "auth": {
+    "dbPath": "AUTH_DB_PATH",
+    "jwtSecret": "AUTH_JWT_SECRET",
+    "tokenExpiresIn": "AUTH_TOKEN_EXPIRES_IN",
+    "trustIngress": "AUTH_TRUST_INGRESS",
+    "ingressSource": "AUTH_INGRESS_SOURCE"
+  },
+  "runtime": {
+    "dbPath": "RUNTIME_DB_PATH"
+  },
+  "httpServer": {
+    "port": "HTTP_PORT"
+  },
+  "openapi": {
+    "serverUrl": "OPENAPI_SERVER_URL"
+  },
+  "logger": {
+    "level": "LOG_LEVEL"
+  }
+}

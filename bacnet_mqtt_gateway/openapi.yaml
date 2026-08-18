@@ -1,0 +1,459 @@
+openapi: 3.0.0
+info:
+  title: BACnet MQTT Gateway API
+  version: 2.0.0
+  description: API for managing and interacting with the BACnet MQTT Gateway, including runtime health for production deployments.
+
+servers:
+  - url: ../
+    description: Gateway API relative to the operations console
+
+security:
+  - bearerAuth: []
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    DeviceScanRequest:
+      type: object
+      properties:
+        deviceId:
+          type: string
+          description: The BACnet device ID (as configured in devices/*.json or discovered).
+          example: "114"
+        address:
+          type: string
+          description: The IP address of the BACnet device.
+          example: "192.168.1.101"
+    DeviceConfigPolling:
+      type: object
+      properties:
+        class:
+          type: string
+          description: Polling class used by the bounded scheduler.
+          enum: [fast, normal, slow]
+          example: fast
+        intervalMs:
+          type: integer
+          description: Explicit polling interval in milliseconds.
+          example: 5000
+        freshnessMs:
+          type: integer
+          description: Maximum age in milliseconds before downstream systems should treat the value as stale.
+          example: 15000
+        schedule:
+          type: string
+          description: Optional cron-style schedule expression for polling.
+          example: "*/15 * * * * *"
+    DeviceConfigObject:
+      type: object
+      properties:
+        objectId:
+          type: object
+          properties:
+            type:
+              type: integer
+              description: BACnet object type number.
+              example: 2
+            instance:
+              type: integer
+              description: BACnet object instance number.
+              example: 202
+    DeviceConfiguration:
+      type: object
+      properties:
+        device:
+          $ref: '#/components/schemas/DeviceScanRequest'
+        polling:
+          $ref: '#/components/schemas/DeviceConfigPolling'
+        objects:
+          type: array
+          items:
+            $ref: '#/components/schemas/DeviceConfigObject'
+    ConfiguredDeviceObject:
+      type: object
+      description: BACnet object configured for polling on a device.
+      properties:
+        objectKey:
+          type: string
+          description: Stable object key in type_instance form, used to compare configured, discovered, and runtime objects.
+          example: "2_202"
+        objectType:
+          type: integer
+          description: BACnet object type number.
+          example: 2
+        objectInstance:
+          type: integer
+          description: BACnet object instance number.
+          example: 202
+        name:
+          type: string
+          nullable: true
+          description: Configured or discovered object name, when available.
+          example: Indoor Temperature
+        description:
+          type: string
+          nullable: true
+          description: Configured or discovered object description, when available.
+          example: Zone temperature sensor
+    ConfiguredDevice:
+      type: object
+      description: Polling metadata and configured object list for one BACnet device.
+      properties:
+        deviceId:
+          type: string
+          description: Configured device ID.
+          example: "114"
+        address:
+          type: string
+          nullable: true
+          description: BACnet device network address.
+          example: "192.168.1.101"
+        schedule:
+          type: string
+          nullable: true
+          description: Cron-style polling schedule, when configured.
+          example: "*/15 * * * * *"
+        pollClass:
+          type: string
+          nullable: true
+          description: Polling class used by the bounded scheduler.
+          enum: [fast, normal, slow]
+          example: normal
+        intervalMs:
+          type: integer
+          nullable: true
+          description: Explicit polling interval in milliseconds.
+          example: 5000
+        freshnessMs:
+          type: integer
+          nullable: true
+          description: Maximum age in milliseconds before downstream systems should treat the value as stale.
+          example: 15000
+        objectCount:
+          type: integer
+          description: Number of objects configured for polling.
+          example: 3
+        objects:
+          type: array
+          description: Configured objects used by the admin UI diagnostics view.
+          items:
+            $ref: '#/components/schemas/ConfiguredDeviceObject'
+    BacnetObjectResponse:
+      type: object
+      properties:
+        objectId:
+          type: object
+          properties:
+            type: 
+              type: integer
+            instance:
+              type: integer
+        name:
+          type: string
+          nullable: true
+        description:
+          type: string
+          nullable: true
+    RuntimeObjectState:
+      type: object
+      properties:
+        device_id:
+          type: string
+          example: "114"
+        object_key:
+          type: string
+          example: "2_202"
+        object_name:
+          type: string
+          nullable: true
+          example: Indoor Temperature
+        value:
+          nullable: true
+          description: Decoded current object value from the runtime database.
+          oneOf:
+            - type: string
+            - type: number
+            - type: boolean
+            - type: object
+            - type: array
+              items: {}
+        acquired_at:
+          type: integer
+          nullable: true
+          description: Unix epoch milliseconds when the BACnet value was acquired.
+        published_at:
+          type: integer
+          nullable: true
+          description: Unix epoch milliseconds when the value was published to MQTT.
+        freshness_ms:
+          type: integer
+          nullable: true
+        source_status:
+          type: string
+          nullable: true
+          example: fresh
+        poll_duration_ms:
+          type: integer
+          nullable: true
+        updated_at:
+          type: integer
+          description: Unix epoch milliseconds when the runtime row was last updated.
+    WritePropertyRequest:
+      type: object
+      required:
+        - deviceId
+        - objectType
+        - objectInstance
+        - propertyId
+        - value
+      properties:
+        deviceId:
+          type: string
+          description: The configured deviceId (key from deviceConfigs map).
+          example: "114"
+        objectType:
+          type: integer
+          description: BACnet object type.
+        objectInstance:
+          type: integer
+          description: BACnet object instance.
+        propertyId:
+          type: integer
+          description: BACnet property ID to write.
+        value:
+          type: object 
+          description: The value to write. Can be string, number, boolean.
+        priority:
+          type: integer
+          format: int32
+          minimum: 1
+          maximum: 16
+          nullable: true
+          description: BACnet write priority (1-16).
+        bacnetApplicationTag:
+          type: integer
+          format: int32
+          nullable: true
+          description: BACnet Application Tag (from bacnet.enum.ApplicationTags) to specify value type.
+    ErrorResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          example: error
+        message:
+          type: string
+    SuccessResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          example: success
+        message:
+          type: string
+        response: 
+          type: object 
+
+paths:
+  /api/bacnet/scan:
+    put:
+      summary: Scan for BACnet devices
+      description: Initiates a BACnet 'Who-Is' broadcast to discover devices on the network. The server listens for responses for a fixed duration (e.g., 5 seconds).
+      responses:
+        '200':
+          description: An array of discovered BACnet devices.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object 
+                  properties:
+                    address:
+                      type: string
+                    deviceId:
+                      type: integer
+        '500':
+          description: Internal server error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/bacnet/{deviceId}/objects:
+    put:
+      summary: Scan a specific BACnet device for its objects
+      parameters:
+        - name: deviceId
+          in: path
+          required: true
+          description: The ID of the BACnet device to scan (must match a configured deviceId or one from discovery).
+          schema:
+            type: string
+      requestBody:
+        description: Device information, typically its IP address and BACnet deviceId.
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeviceScanRequest' 
+      responses:
+        '200':
+          description: An array of BACnet objects found on the device.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/BacnetObjectResponse'
+        '400':
+          description: Bad request (e.g., invalid deviceId format).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Device not found or not responding.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/bacnet/configured:
+    get:
+      summary: List configured BACnet devices and polling objects
+      description: Returns configured device polling metadata and object keys for comparing discovered scan results with configured and runtime object state.
+      responses:
+        '200':
+          description: Configured BACnet devices and their polling object metadata.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ConfiguredDevice'
+
+  /api/bacnet/{deviceId}/config:
+    put:
+      summary: Configure polling for a specific BACnet device
+      parameters:
+        - name: deviceId
+          in: path
+          required: true
+          description: The ID of the BACnet device to configure.
+          schema:
+            type: string
+      requestBody:
+        description: Full device configuration including device info, polling schedule, and objects to poll.
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeviceConfiguration'
+      responses:
+        '200':
+          description: Configuration saved and polling started/updated. Returns an empty object.
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Bad request (e.g., invalid configuration format).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/bacnet/runtime:
+    get:
+      summary: List runtime BACnet device state
+      description: Returns persisted runtime device health, circuit breaker state, and last successful poll metadata.
+      responses:
+        '200':
+          description: Runtime state entries for configured devices.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+
+  /api/bacnet/runtime-objects/{deviceId}:
+    get:
+      summary: List runtime BACnet object state for a device
+      description: Returns persisted object runtime values from SQLite for a configured BACnet device.
+      parameters:
+        - name: deviceId
+          in: path
+          required: true
+          description: The configured BACnet device ID.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Runtime object state entries for the device.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RuntimeObjectState'
+        '500':
+          description: Internal server error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/bacnet/write:
+    put:
+      summary: Write to a BACnet object property
+      requestBody:
+        description: Details of the BACnet write operation.
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WritePropertyRequest'
+      responses:
+        '200':
+          description: Write operation successful.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse' 
+        '400':
+          description: Bad request (e.g., missing fields, invalid data types).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Device configuration not found for the given deviceId.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: BACnet write operation failed or internal server error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'

@@ -1,0 +1,22 @@
+{
+  "mqtt_mode": "supervisor",
+  "mqtt_gateway_id": "container-smoke",
+  "mqtt_external_port": 1883,
+  "mqtt_tls": false,
+  "mqtt_tls_verify": true,
+  "bacnet_config_directory": "devices",
+  "bacnet_interface": "0.0.0.0",
+  "bacnet_broadcast_address": "255.255.255.255",
+  "bacnet_port": 47819,
+  "bacnet_apdu_timeout": 10000,
+  "bacnet_max_segments": 112,
+  "bacnet_max_apdu": 5,
+  "polling_global_concurrency": 2,
+  "polling_object_concurrency": 4,
+  "polling_scheduler_tick_ms": 1000,
+  "polling_default_freshness_ms": 30000,
+  "polling_failure_threshold": 3,
+  "polling_base_backoff_ms": 5000,
+  "polling_max_backoff_ms": 120000,
+  "log_level": "error"
+}
