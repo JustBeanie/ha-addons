@@ -23,6 +23,19 @@ theme:
   features:
     - navigation.sections
     - navigation.top
+    # README.md in a folder becomes that section's own page rather than sitting
+    # inside it as a separate child.
+    - navigation.indexes
+    # Keeps the address bar on the section being read, so a URL copied out of
+    # the bar lands where the reader actually was.
+    - navigation.tracking
+    # Previous/next links at the foot of every page. With no `nav:` and 40-odd
+    # documents, the sidebar was the only way to move between them.
+    - navigation.footer
+    # NOTE: navigation.instant is deliberately absent. Both mermaid-init.js and
+    # annotate.js bind to DOMContentLoaded and rely on full page loads; turning
+    # it on silently kills every diagram and every highlight until they are
+    # rewritten onto Material's document$ observable.
     - search.suggest
     - search.highlight
     - content.code.copy
@@ -68,6 +81,14 @@ markdown_extensions:
           class: diagram
           format: !!python/name:pymdownx.superfences.fence_div_format
   - pymdownx.details
+  # superfences was already here; this is the other half of the pair. Blocks opt
+  # in per fence with `linenums="1"`, which then get anchor links per line - the
+  # useful part when a doc is walking through a long automation.
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
 
 # Load order matters: the UMD bundle assigns globalThis.mermaid synchronously,
 # and the init script expects it to already exist.
@@ -83,7 +104,14 @@ extra_css:
   - assets/annotate.css
 
 plugins:
-  - search
+  - search:
+      # The default separator is whitespace and hyphens, which makes
+      # `sensor.nw_sun_penetration` a single indivisible token - so searching
+      # for `penetration` found nothing at all. Splitting on dots and
+      # underscores as well is what makes an entity-ID-heavy docs set
+      # searchable by any part of an ID. The `(?!\d)` guard keeps decimals
+      # like `1.5` intact.
+      separator: '[\s\-,:!=\[\]()"`/]+|\.(?!\d)|&[lg]t;|_+'
 
 # No `nav:` - MkDocs builds it from the file tree and uses README.md as the
 # index, so adding a doc to the source repo needs no change here.
@@ -91,3 +119,10 @@ plugins:
 exclude_docs: |
   .gitignore
   .claude/
+
+# Retired documents stay built, linkable and searchable - they are still the
+# record of why something was removed - but they do not sit in the sidebar
+# looking like current design. Verified: the page is still emitted and still in
+# the search index, it just leaves the nav.
+not_in_nav: |
+  docs/retired/
