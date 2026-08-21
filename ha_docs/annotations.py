@@ -35,6 +35,20 @@ from urllib.parse import urlparse
 STORE_PATH = "/data/annotations.json"
 BIND = ("127.0.0.1", 8100)
 
+# The Sync button in the site header writes SYNC_REQUEST; run.sh's refresh worker
+# polls for it between sleeps and pulls straight away rather than waiting out the
+# rest of poll_interval. A file, because the worker is a bash loop in another
+# process and /data is the one channel both sides already share.
+SYNC_REQUEST_PATH = "/data/.sync-now"
+
+# Written by run.sh: BUILD_STAMP_PATH after a successful build, REFRESH_MARKER
+# after every completed pass whether or not anything changed. The browser needs
+# both - the first to know a new site exists, the second to know the worker has
+# finished looking, so "nothing changed" can be reported immediately instead of
+# waiting out a timeout.
+BUILD_STAMP_PATH = "/data/.last_build"
+REFRESH_MARKER_PATH = "/data/.last_refresh"
+
 # Request bodies are one annotation. Anything near this is a bug or an abuse.
 MAX_BODY = 64 * 1024
 
@@ -56,6 +70,15 @@ CAPS = {
 # HA's to-do summary field is a single line; anything longer is unreadable in
 # the UI and some backends reject it outright.
 TODO_SUMMARY_MAX = 240
+
+
+def read_marker(path):
+    """Contents of one of run.sh's small state files, or "" if it is not there."""
+    try:
+        with open(path, "r", encoding="utf-8") as handle:
+            return handle.read().strip()
+    except OSError:
+        return ""
 
 
 def log(level, message):
@@ -331,12 +354,44 @@ class Handler(BaseHTTPRequestHandler):
         if route == "/anno/all":
             self._reply(200, {"ok": True, "annotations": STORE.all()})
         elif route == "/anno/health":
-            self._reply(200, {"ok": True, "todo": bool(os.environ.get("TODO_ENTITY"))})
+            self._reply(200, {
+                "ok": True,
+                "todo": bool(os.environ.get("TODO_ENTITY")),
+                "build": read_marker(BUILD_STAMP_PATH),
+                "refreshed": read_marker(REFRESH_MARKER_PATH),
+            })
         else:
             self._reply(404, {"ok": False, "error": "no such route"})
 
+    def _request_sync(self):
+        """Ask the refresh worker to pull now.
+
+        Nothing is validated because nothing is accepted: the request is the
+        whole message, and the file it writes is read by one bash loop that
+        deletes it again. The reply carries the current state so the caller has
+        something to compare against while it waits.
+        """
+        try:
+            with open(SYNC_REQUEST_PATH, "w", encoding="utf-8") as handle:
+                handle.write(str(int(time.time())))
+        except OSError as err:
+            log("error", "cannot request a sync: {}".format(err))
+            self._reply(500, {"ok": False, "error": "cannot request a sync"})
+            return
+        self._reply(200, {
+            "ok": True,
+            "build": read_marker(BUILD_STAMP_PATH),
+            "refreshed": read_marker(REFRESH_MARKER_PATH),
+        })
+
     def do_POST(self):
         route = urlparse(self.path).path.rstrip("/")
+
+        # Answered before the body is read: a sync request carries no payload,
+        # and _body() rejects an empty one.
+        if route == "/anno/sync":
+            self._request_sync()
+            return
 
         try:
             payload = self._body()

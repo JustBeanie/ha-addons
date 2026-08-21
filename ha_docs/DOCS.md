@@ -17,7 +17,7 @@ only ever pulls.
 | `branch` | `main` | Branch to follow. |
 | `poll_interval` | `900` | Seconds between checks. 60–86400. |
 | `site_name` | `Docs` | Title in the header and browser tab. |
-| `git_token` | *(unset)* | Personal access token. Only needed for a private repo; never written to the log. |
+| `git_token` | *(unset)* | Personal access token. Only needed for a private repo. HA Docs never writes it to its log, but add-on configuration and status output containing it is sensitive. |
 | `todo_entity` | *(unset)* | To-do list that notes are mirrored onto, e.g. `todo.docs_review`. Leave empty to keep notes inside the docs site. |
 | `report_doc_link_repairs` | `true` | Raise a Home Assistant Repairs issue for each invalid automation/script Docs link. Requires Spook. Never changes entity descriptions. |
 | `repair_scan_on_start` | `true` | Start the report-only Docs-link Repair scan in the background when HA Docs starts. |
@@ -53,8 +53,24 @@ scoped to **only** the docs repository, with **Repository permissions → Conten
 Read-only**. Paste it into `git_token`. Nothing else is needed — the add-on only
 ever reads.
 
-The token is used to build the clone URL and is never logged, but note it is
-stored in the add-on options like any other add-on secret.
+HA Docs uses the token to build the clone URL in memory. It logs only **Using
+authenticated access**, and never the token or the authenticated clone URL.
+
+The token is still stored in Supervisor options, and Home Assistant deliberately
+lets authorized manager/admin callers read full add-on options back — including
+password fields. Masking the field in the configuration UI does not remove it
+from those API responses. See the
+[Supervisor API documentation](https://developers.home-assistant.io/docs/api/supervisor/endpoints/#addons).
+
+So treat add-on configuration and status output as sensitive: do not paste it
+into a chat, an issue, or a bug report. If it is exposed, revoke and rotate the
+token immediately.
+
+If you inspect Home Assistant through HA-MCP, enable its **Redact secrets**
+option (`redact_secrets: true`) and restart HA-MCP before asking for detailed
+add-on status; a password option that is set then reads as `<redacted: set>`.
+That protects HA-MCP responses only — it does not make the underlying Supervisor
+option inaccessible to legitimately privileged callers.
 
 ## How it renders your Markdown
 
@@ -64,8 +80,34 @@ stays exactly as GitHub renders it.
 
 - Navigation is generated from the file tree; `README.md` becomes the index.
 - Relative `.md` links are rewritten automatically.
-- Full-text search is built in.
+- Full-text search is built in, and understands entity IDs (see below).
 - ` ```mermaid ` fenced blocks render as diagrams, the same as on GitHub.
+- Previous/next links sit at the foot of every page.
+- Each page links back to GitHub to edit or view its source, when the docs repo
+  is on GitHub.
+- The footer shows the commit the site was built from.
+- Anything under a `retired/` folder stays built, linkable and searchable, but
+  is kept out of the sidebar so it does not read as current.
+
+### Searching for entity IDs
+
+Most search setups treat `sensor.nw_sun_penetration` as one indivisible word, so
+searching for `penetration` finds nothing at all — which is close to useless for
+a docs set that is largely made of entity IDs. This add-on splits on dots and
+underscores as well as whitespace, so any part of an ID finds the whole thing.
+Version numbers and decimals like `1.5` are left alone.
+
+### Editing a page from the page
+
+With a GitHub `repository` configured, every page carries an edit and a view
+action in its top-right corner, pointing at that document in the repo on the
+configured branch. The links are built from `repository`, never from the
+tokenised clone URL, so a configured `git_token` cannot appear in a page.
+
+Material normally fetches star and fork counts from `api.github.com` on every
+page load once a repository is configured. That request is suppressed — the
+element it attaches to is overridden away — so the site stays as self-contained
+as it was before.
 
 ### Diagrams stay offline
 
@@ -158,7 +200,14 @@ would survive.
 
 ## Forcing an immediate sync
 
-Restarting the add-on triggers a pull and rebuild straight away:
+Use the **Sync** button in the site header. It asks the add-on to pull straight
+away rather than waiting out the rest of `poll_interval`, then watches for the
+outcome: if a new site was built the page reloads itself, and if the repository
+had nothing new it says so. This is the normal way to read something you have
+just pushed.
+
+Restarting the add-on also triggers a pull and rebuild, and is still the right
+tool if the add-on itself looks wedged:
 
 ```yaml
 action: hassio.addon_restart
@@ -175,3 +224,8 @@ repository. The Supervisor shows it in the add-on page URL.
 - The site is fully self-contained; no CDN or web-font requests leave the box.
 - A failed `git fetch` or `mkdocs build` leaves the previously built site in
   place rather than blanking it. Check the add-on log.
+- The Supervisor watchdog probes `/anno/health`, so a failure means nginx or the
+  annotation store has actually stopped answering — not merely that the
+  container exited.
+- The first-ever start serves a placeholder that refreshes itself until the
+  first build lands.

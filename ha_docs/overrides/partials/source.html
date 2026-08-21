@@ -1,0 +1,13 @@
+{#-
+  Deliberately empty, overriding the theme's own partials/source.html.
+
+  Material renders that partial with data-md-component="source", and its bundled
+  JavaScript keys a fetch of https://api.github.com/repos/<owner>/<name> to that
+  element to show star and fork counts in the header. This add-on serves a
+  LAN-only box and promises in DOCS.md that nothing leaves it at page load, so
+  the element the fetch attaches to is removed rather than the request being
+  tolerated and failing.
+
+  Setting repo_url is still worth it: the per-page edit and view actions come
+  from partials/actions.html, which reads page.edit_url and makes no requests.
+-#}

@@ -440,6 +440,8 @@
     "M14,10H19.5L14,4.5V10M5,3H15L21,9V19A2,2 0 0,1 19,21H5A2,2 0 0,1 3,19V5A2,2 0 0,1 5,3M5,12V14H19V12H5M5,16V18H14V16H5Z";
   var ICON_TRASH =
     "M19,4H15.5L14.5,3H9.5L8.5,4H5V6H19M6,19A2,2 0 0,0 8,21H16A2,2 0 0,0 18,19V7H6V19Z";
+  var ICON_SYNC =
+    "M12,18A6,6 0 0,1 6,12C6,11 6.25,10.03 6.7,9.2L5.24,7.74C4.46,8.97 4,10.43 4,12A8,8 0 0,0 12,20V23L16,19L12,15V18M12,4V1L8,5L12,9V6A6,6 0 0,1 18,12C18,13 17.75,13.97 17.3,14.8L18.76,16.26C19.54,15.03 20,13.57 20,12A8,8 0 0,0 12,4Z";
 
   // Falls back rather than trusting innerWidth outright: this runs inside the
   // ingress iframe, and a viewport that reports 0 would clamp every popup to a
@@ -737,6 +739,99 @@
       });
   }
 
+  // --- pull the latest docs now ----------------------------------------------
+  //
+  // The add-on polls its git remote on poll_interval, 15 minutes by default, so
+  // pushing a doc from a desk and then reading it on a phone used to mean either
+  // waiting or restarting the add-on. This asks the refresh worker to pull now.
+  //
+  // What comes back is watched rather than assumed. The add-on reports two
+  // things: `refreshed`, bumped after every completed pass, and `build`, which
+  // only moves when a new site was actually produced. Waiting for the first tells
+  // us the worker has finished looking; comparing the second tells us whether
+  // there was anything to find. Without that pair, "nothing had changed" would be
+  // indistinguishable from "still building" and would sit out the whole timeout.
+  // ---------------------------------------------------------------------------
+
+  var SYNC_POLL = 2500;
+  var SYNC_TIMEOUT = 120000;
+
+  var syncButton = null;
+
+  function setSyncing(on) {
+    if (!syncButton) {
+      return;
+    }
+    syncButton.disabled = on;
+    syncButton.classList.toggle("anno-sync--busy", on);
+  }
+
+  function watchSync(before, startedAt) {
+    if (Date.now() - startedAt > SYNC_TIMEOUT) {
+      setSyncing(false);
+      flash("Still working - check the add-on log");
+      return;
+    }
+    setTimeout(function () {
+      api("health")
+        .then(function (now) {
+          if (!now || now.refreshed === before.refreshed) {
+            watchSync(before, startedAt);
+            return;
+          }
+          setSyncing(false);
+          if (now.build && now.build !== before.build) {
+            flash("New docs built - reloading");
+            setTimeout(function () {
+              location.reload();
+            }, 700);
+          } else {
+            flash("Already up to date");
+          }
+        })
+        .catch(function () {
+          // A rebuild swaps the site directory underneath nginx, so a request
+          // landing in that window can fail once. Keep waiting rather than
+          // reporting a failure that has probably already resolved.
+          watchSync(before, startedAt);
+        });
+    }, SYNC_POLL);
+  }
+
+  function requestSync() {
+    if (syncButton && syncButton.disabled) {
+      return;
+    }
+    setSyncing(true);
+    flash("Pulling the latest docs");
+
+    api("health")
+      .then(function (before) {
+        return api("sync", {}).then(function () {
+          watchSync(before || {}, Date.now());
+        });
+      })
+      .catch(function (err) {
+        console.error("[ha_docs] could not request a sync", err);
+        setSyncing(false);
+        flash("Could not request a sync - is the add-on still running?");
+      });
+  }
+
+  function addSyncButton() {
+    var header = document.querySelector(".md-header__inner");
+    if (!header) {
+      return;
+    }
+    syncButton = el("button", "md-header__button md-icon anno-sync");
+    syncButton.type = "button";
+    syncButton.title = "Pull the latest docs now";
+    syncButton.setAttribute("aria-label", "Pull the latest docs now");
+    syncButton.innerHTML = icon(ICON_SYNC);
+    syncButton.addEventListener("click", requestSync);
+    header.appendChild(syncButton);
+  }
+
   // --- review drawer ---------------------------------------------------------
 
   var drawer = null;
@@ -1004,6 +1099,7 @@
       return;
     }
 
+    addSyncButton();
     addHeaderButton();
 
     api("all")
@@ -1051,7 +1147,7 @@
         }
         return;
       }
-      if (event.target.closest && event.target.closest(".anno-ui, .anno-open")) {
+      if (event.target.closest && event.target.closest(".anno-ui, .anno-open, .anno-sync")) {
         return;
       }
       closePopover();
