@@ -65,6 +65,11 @@ readonly SITE_DIR=/data/site
 readonly STAMP_FILE=/data/.last_build
 readonly DOC_LINK_AUDIT=/data/doc-link-repairs.jsonl
 readonly DOC_LINK_READY=/data/.doc-link-checker-ready
+# Touched by annotations.py when the Sync button in the site header is used.
+readonly SYNC_REQUEST=/data/.sync-now
+# Bumped after every completed refresh pass, changed or not, so the site can
+# tell "still working" from "looked, nothing new".
+readonly REFRESH_MARKER=/data/.last_refresh
 
 # The built site is cached against the commit it came from AND the builder that
 # produced it. Keying on the commit alone was a bug: /data survives an image
@@ -90,6 +95,30 @@ if bashio::config.has_value 'git_token'; then
     AUTH_REPO="${REPO/https:\/\//https://$(bashio::config 'git_token')@}"
     log_info "Using authenticated access for the docs repository"
 fi
+
+# The GitHub blob base for the configured repo, or a non-zero return when it is
+# not a GitHub URL. Always derived from REPO, never AUTH_REPO, so a configured
+# git_token cannot reach an entity description, an audit record, or a page.
+github_blob_base() {
+    case "${REPO}" in
+        https://github.com/*.git) echo "${REPO%.git}/blob/${BRANCH}" ;;
+        https://github.com/*)     echo "${REPO}/blob/${BRANCH}" ;;
+        *) return 1 ;;
+    esac
+}
+
+# Read by mkdocs.yml via !ENV to put per-page "edit" and "view source" links on
+# the site. Same token-safety rule as above: built from REPO, never AUTH_REPO.
+# Left empty for a non-GitHub repo, which switches the two actions off rather
+# than pointing them somewhere wrong.
+export REPO_URL=""
+export EDIT_URI=""
+case "${REPO}" in
+    https://github.com/*)
+        REPO_URL="${REPO%.git}"
+        EDIT_URI="edit/${BRANCH}/"
+        ;;
+esac
 
 sync_repo() {
     if [ -d "${REPO_DIR}/.git" ]; then
@@ -127,18 +156,11 @@ reconcile_ha_docs_links() {
     # Only GitHub blob links are accepted in entity descriptions. Keep REPO
     # (rather than AUTH_REPO) here so a configured git token cannot enter a
     # description or an audit record.
-    case "${REPO}" in
-        https://github.com/*.git)
-            local base="${REPO%.git}/blob/${BRANCH}"
-            ;;
-        https://github.com/*)
-            local base="${REPO}/blob/${BRANCH}"
-            ;;
-        *)
-            log_warning "HA Docs-link Repair scan requires a GitHub repository URL"
-            return 1
-            ;;
-    esac
+    local base
+    if ! base=$(github_blob_base); then
+        log_warning "HA Docs-link Repair scan requires a GitHub repository URL"
+        return 1
+    fi
 
     HA_DOC_LINK_AUDIT="${DOC_LINK_AUDIT}" \
         python3 /opt/ha_docs/check_anchors.py --ha --report \
@@ -154,18 +176,11 @@ start_entity_update_watcher() {
         log_info "Targeted entity-update Docs-link checks are disabled"
         return 0
     fi
-    case "${REPO}" in
-        https://github.com/*.git)
-            local base="${REPO%.git}/blob/${BRANCH}"
-            ;;
-        https://github.com/*)
-            local base="${REPO}/blob/${BRANCH}"
-            ;;
-        *)
-            log_warning "Targeted entity-update Docs-link checks require a GitHub repository URL"
-            return 1
-            ;;
-    esac
+    local base
+    if ! base=$(github_blob_base); then
+        log_warning "Targeted entity-update Docs-link checks require a GitHub repository URL"
+        return 1
+    fi
     log_info "Starting targeted automation/script Docs-link watcher: debounce=${ENTITY_UPDATE_DEBOUNCE}s"
     HA_DOCS_REPO_DIR="${REPO_DIR}" \
         HA_DOCS_GITHUB_BASE="${base}" \
@@ -208,6 +223,9 @@ refresh() {
     else
         source_changed=true
         log_info "Building docs: commit=${sha:0:7} builder=${BUILDER_ID:0:7}"
+        # Rendered into the site footer by mkdocs.yml, so a reader can tell which
+        # commit they are looking at without opening this log.
+        export DOCS_BUILD_STAMP="commit ${sha:0:7} - built $(date '+%Y-%m-%d %H:%M')"
         if build_site; then
             echo "${stamp}" > "${STAMP_FILE}"
             log_info "Docs site published: commit=${sha:0:7}"
@@ -232,12 +250,25 @@ refresh() {
     log_info "Refresh worker completed: reason=${reason} elapsed_seconds=$((SECONDS - started_at))"
 }
 
-# nginx needs something to serve even if the very first build failed.
+# nginx needs something to serve even if the very first build failed. The page
+# reloads itself, because a first-ever start otherwise leaves the reader looking
+# at a dead page they have to remember to come back to.
 if [ ! -d "${SITE_DIR}" ]; then
     mkdir -p "${SITE_DIR}"
-    echo "<h1>HA Docs</h1><p>Initial documentation sync is in progress. Check the app log for status.</p>" \
-        > "${SITE_DIR}/index.html"
+    cat > "${SITE_DIR}/index.html" <<'HTML'
+<!doctype html>
+<meta charset="utf-8">
+<meta http-equiv="refresh" content="10">
+<title>HA Docs</title>
+<h1>HA Docs</h1>
+<p>Initial documentation sync is in progress. This page refreshes itself; check
+the add-on log for status.</p>
+HTML
 fi
+
+# A request left behind by a previous run would otherwise fire a pointless
+# refresh the first time round the loop.
+rm -f "${SYNC_REQUEST}"
 
 # Highlights and notes live in /data, never in the docs repo - the add-on still
 # only ever pulls. Start all ingress services before network and API work.
@@ -250,15 +281,43 @@ log_info "Starting nginx on port 8099"
 nginx &
 readonly NGINX_PID=$!
 
+# Sleep out the poll interval in slices rather than in one go, so a sync asked
+# for from the site is picked up within seconds instead of waiting out whatever
+# is left of poll_interval - which defaults to 15 minutes.
+#
+# Returns 0 when a sync was requested, 1 when the interval simply elapsed.
+readonly SYNC_SLICE=5
+wait_for_next_poll() {
+    local waited=0
+    while [ "${waited}" -lt "${INTERVAL}" ]; do
+        if [ -f "${SYNC_REQUEST}" ]; then
+            rm -f "${SYNC_REQUEST}"
+            return 0
+        fi
+        sleep "${SYNC_SLICE}"
+        waited=$((waited + SYNC_SLICE))
+    done
+    return 1
+}
+
 refresh_worker() {
     local initial_reason=startup
     if [ "${REPAIR_SCAN_ON_START}" != "true" ]; then
         initial_reason=startup-skipped
     fi
     refresh "${initial_reason}" || log_warning "Refresh worker failed: reason=${initial_reason}"
+    date +%s > "${REFRESH_MARKER}"
     while true; do
-        sleep "${INTERVAL}"
-        refresh poll || log_warning "Refresh worker failed: reason=poll"
+        local reason=poll
+        if wait_for_next_poll; then
+            reason=sync-request
+            log_info "Sync requested from the docs site"
+        fi
+        refresh "${reason}" || log_warning "Refresh worker failed: reason=${reason}"
+        # Always, success or failure. The Sync button watches this to know the
+        # worker has finished looking, and would otherwise sit out its whole
+        # timeout every time a pull turned up nothing.
+        date +%s > "${REFRESH_MARKER}"
     done
 }
 

@@ -64,8 +64,34 @@ stays exactly as GitHub renders it.
 
 - Navigation is generated from the file tree; `README.md` becomes the index.
 - Relative `.md` links are rewritten automatically.
-- Full-text search is built in.
+- Full-text search is built in, and understands entity IDs (see below).
 - ` ```mermaid ` fenced blocks render as diagrams, the same as on GitHub.
+- Previous/next links sit at the foot of every page.
+- Each page links back to GitHub to edit or view its source, when the docs repo
+  is on GitHub.
+- The footer shows the commit the site was built from.
+- Anything under a `retired/` folder stays built, linkable and searchable, but
+  is kept out of the sidebar so it does not read as current.
+
+### Searching for entity IDs
+
+Most search setups treat `sensor.nw_sun_penetration` as one indivisible word, so
+searching for `penetration` finds nothing at all — which is close to useless for
+a docs set that is largely made of entity IDs. This add-on splits on dots and
+underscores as well as whitespace, so any part of an ID finds the whole thing.
+Version numbers and decimals like `1.5` are left alone.
+
+### Editing a page from the page
+
+With a GitHub `repository` configured, every page carries an edit and a view
+action in its top-right corner, pointing at that document in the repo on the
+configured branch. The links are built from `repository`, never from the
+tokenised clone URL, so a configured `git_token` cannot appear in a page.
+
+Material normally fetches star and fork counts from `api.github.com` on every
+page load once a repository is configured. That request is suppressed — the
+element it attaches to is overridden away — so the site stays as self-contained
+as it was before.
 
 ### Diagrams stay offline
 
@@ -158,7 +184,14 @@ would survive.
 
 ## Forcing an immediate sync
 
-Restarting the add-on triggers a pull and rebuild straight away:
+Use the **Sync** button in the site header. It asks the add-on to pull straight
+away rather than waiting out the rest of `poll_interval`, then watches for the
+outcome: if a new site was built the page reloads itself, and if the repository
+had nothing new it says so. This is the normal way to read something you have
+just pushed.
+
+Restarting the add-on also triggers a pull and rebuild, and is still the right
+tool if the add-on itself looks wedged:
 
 ```yaml
 action: hassio.addon_restart
@@ -175,3 +208,8 @@ repository. The Supervisor shows it in the add-on page URL.
 - The site is fully self-contained; no CDN or web-font requests leave the box.
 - A failed `git fetch` or `mkdocs build` leaves the previously built site in
   place rather than blanking it. Check the add-on log.
+- The Supervisor watchdog probes `/anno/health`, so a failure means nginx or the
+  annotation store has actually stopped answering — not merely that the
+  container exited.
+- The first-ever start serves a placeholder that refreshes itself until the
+  first build lands.

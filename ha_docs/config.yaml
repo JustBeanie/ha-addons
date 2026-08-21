@@ -1,7 +1,7 @@
 name: "HA Docs"
 slug: "ha_docs"
 description: "Serves a git repo of Markdown as a searchable MkDocs site behind HA ingress."
-version: "1.8.2"
+version: "1.9.0"
 url: "https://github.com/JustBeanie/ha-addons"
 
 arch:
@@ -17,6 +17,12 @@ boot: auto
 
 ingress: true
 ingress_port: 8099
+
+# An application-level probe rather than just "is the container still up".
+# /anno/health is served by annotations.py and proxied by nginx, so a failure
+# means one of the two processes this add-on actually depends on has gone,
+# which is exactly the case the Supervisor should restart for.
+watchdog: "http://[HOST]:[PORT:8099]/anno/health"
 panel_icon: "mdi:book-open-variant-outline"
 panel_title: "HA Docs"
 

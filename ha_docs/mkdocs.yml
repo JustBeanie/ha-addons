@@ -6,6 +6,18 @@ site_name: !ENV [SITE_NAME, "HA Automation Docs"]
 docs_dir: /data/repo
 site_dir: /data/site
 
+# Exported by run.sh from the `repository` option - never from the tokenised
+# clone URL, so a configured git_token cannot be rendered into a page. Empty
+# when the docs repo is not on GitHub, which leaves the edit and view actions
+# switched off rather than pointing somewhere wrong.
+repo_url: !ENV [REPO_URL, ""]
+edit_uri: !ENV [EDIT_URI, ""]
+
+# Shown in the site footer. run.sh fills this in with the commit the site was
+# built from, which is the only way to tell a stale site from a current one
+# without opening the add-on log.
+copyright: !ENV [DOCS_BUILD_STAMP, ""]
+
 # Flat .html files rather than directory URLs. Under ingress the add-on is
 # mounted at a random /api/hassio_ingress/<token>/ prefix, and directory URLs
 # make nginx issue trailing-slash redirects that drop that prefix.
@@ -40,6 +52,10 @@ theme:
     - search.highlight
     - content.code.copy
     - toc.follow
+    # Per-page "edit this page" / "view source" links back to GitHub. Both are
+    # inert unless run.sh found a GitHub repository URL to export.
+    - content.action.edit
+    - content.action.view
   palette:
     - media: "(prefers-color-scheme: light)"
       scheme: default
