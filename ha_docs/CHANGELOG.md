@@ -31,6 +31,10 @@ An icon, and the reading side of the site catching up with the backend.
 - The first-run "sync in progress" page refreshes itself instead of stranding
   the reader on a dead page.
 - Code fences can opt into line numbers with linkable anchors per line.
+- Documents that Supervisor returns `git_token` in full to authorized admin
+  callers, so add-on configuration and status output should be treated as
+  sensitive and the token rotated if it is ever exposed. Carried over from the
+  1.3.1 draft, which was never merged.
 
 ## 1.8.2 - 2026-08-16
 

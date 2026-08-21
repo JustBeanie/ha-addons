@@ -17,7 +17,7 @@ only ever pulls.
 | `branch` | `main` | Branch to follow. |
 | `poll_interval` | `900` | Seconds between checks. 60–86400. |
 | `site_name` | `Docs` | Title in the header and browser tab. |
-| `git_token` | *(unset)* | Personal access token. Only needed for a private repo; never written to the log. |
+| `git_token` | *(unset)* | Personal access token. Only needed for a private repo. HA Docs never writes it to its log, but add-on configuration and status output containing it is sensitive. |
 | `todo_entity` | *(unset)* | To-do list that notes are mirrored onto, e.g. `todo.docs_review`. Leave empty to keep notes inside the docs site. |
 | `report_doc_link_repairs` | `true` | Raise a Home Assistant Repairs issue for each invalid automation/script Docs link. Requires Spook. Never changes entity descriptions. |
 | `repair_scan_on_start` | `true` | Start the report-only Docs-link Repair scan in the background when HA Docs starts. |
@@ -53,8 +53,24 @@ scoped to **only** the docs repository, with **Repository permissions → Conten
 Read-only**. Paste it into `git_token`. Nothing else is needed — the add-on only
 ever reads.
 
-The token is used to build the clone URL and is never logged, but note it is
-stored in the add-on options like any other add-on secret.
+HA Docs uses the token to build the clone URL in memory. It logs only **Using
+authenticated access**, and never the token or the authenticated clone URL.
+
+The token is still stored in Supervisor options, and Home Assistant deliberately
+lets authorized manager/admin callers read full add-on options back — including
+password fields. Masking the field in the configuration UI does not remove it
+from those API responses. See the
+[Supervisor API documentation](https://developers.home-assistant.io/docs/api/supervisor/endpoints/#addons).
+
+So treat add-on configuration and status output as sensitive: do not paste it
+into a chat, an issue, or a bug report. If it is exposed, revoke and rotate the
+token immediately.
+
+If you inspect Home Assistant through HA-MCP, enable its **Redact secrets**
+option (`redact_secrets: true`) and restart HA-MCP before asking for detailed
+add-on status; a password option that is set then reads as `<redacted: set>`.
+That protects HA-MCP responses only — it does not make the underlying Supervisor
+option inaccessible to legitimately privileged callers.
 
 ## How it renders your Markdown
 
