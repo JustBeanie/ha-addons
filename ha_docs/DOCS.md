@@ -172,11 +172,32 @@ completes it. Editing a note afterwards does **not** update its item: it may be
 one you have already started acting on, and quietly rewriting it would be worse
 than leaving it as written.
 
-You can still tick items off in Home Assistant as you deal with them — that has
-no effect on the highlight, which stays in the docs until you delete it.
+**Ticking an item off clears its highlight.** As of 1.11.0 the loop closes both
+ways: deleting a note completes its item, and an item that is no longer open —
+ticked off, or deleted from the list outright — takes its annotation with it.
+Work down the list in Home Assistant and the pages tidy up behind you.
+
+The annotation is *deleted*, highlight and note text together. The wording
+survives as the item's own summary, so it is not unrecoverable, but it will not
+be on the page any more.
+
+This runs once per `poll_interval`, so a ticked-off note clears within fifteen
+minutes by default. **Press Sync in the site header to do it now** — the button
+that pulls the docs reconciles the list in the same pass.
+
+Two consequences worth knowing about, because both look like faults and neither
+is:
+
+- **Renaming an item in Home Assistant clears its highlight.** Items are matched
+  by the summary they were created with, so a rename cannot be told apart from a
+  removal.
+- **Notes with identical text share a single item**, and so clear together or not
+  at all. Completing one of them leaves all of them highlighted until the last is
+  done.
 
 If the list is unreachable the note is still saved — the failure is logged and
-nothing is lost.
+nothing is lost. The same holds in reverse: a pass that cannot read the list does
+nothing whatsoever, rather than treating silence as "everything is done".
 
 ### When a doc changes underneath a highlight
 

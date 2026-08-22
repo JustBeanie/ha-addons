@@ -1,5 +1,32 @@
 # Changelog
 
+## 1.11.0 - 2026-08-22
+
+Working through the to-do list now cleans up the docs behind you.
+
+- **Ticking an item off clears its highlight.** Until now the mirroring ran one
+  way only: writing a note created an item, deleting the note completed it, and
+  completing the item did nothing at all. That was deliberate, and it was wrong
+  — clearing nine notes off a list left nine highlights sitting on a page that
+  had already been dealt with, with no way to shift them but deleting each by
+  hand. An item that is no longer open, whether ticked off or deleted outright,
+  now takes its annotation with it.
+- **The Sync button reconciles as well as pulls.** The pass runs once per
+  completed refresh, so it inherits `poll_interval` instead of adding a second
+  timer to keep in step with it — and because Sync forces a refresh, it doubles
+  as "clear now" for anyone who does not want to wait out fifteen minutes.
+- **A list that cannot be read prunes nothing.** "Could not read the list" and
+  "the list has nothing open" are answered separately and never collapsed into
+  one value. Conflating them would let a brief outage delete every note-bearing
+  highlight in the store at once, which is the one way this feature could
+  destroy work rather than tidy it.
+- Bare highlights are untouched, as are notes whose push never landed. Neither
+  has an item behind it, so neither is a task the list can have finished.
+- Two behaviours that read as bugs and are not, both now documented: renaming an
+  item in Home Assistant clears its highlight, because items are matched by the
+  summary they were created with; and notes with identical text share one item,
+  so they clear together or not at all.
+
 ## 1.10.0 - 2026-08-22
 
 The link checkers stop reporting only into the log.

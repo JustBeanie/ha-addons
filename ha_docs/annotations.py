@@ -51,6 +51,12 @@ SYNC_REQUEST_PATH = "/data/.sync-now"
 BUILD_STAMP_PATH = "/data/.last_build"
 REFRESH_MARKER_PATH = "/data/.last_refresh"
 
+# How often reconcile_worker stats the refresh marker. This is NOT the reconcile
+# cadence - the core API is only called when the marker changes, which run.sh
+# does once per completed refresh pass. Keep it small: it is a stat of one tiny
+# file, and it decides how quickly the site's Sync button clears a done note.
+MARKER_POLL_SECONDS = 5
+
 # Request bodies are one annotation. Anything near this is a bug or an abuse.
 MAX_BODY = 64 * 1024
 
@@ -239,26 +245,34 @@ def todo_summary(record):
     return " ".join(record.get("note", "").split())[:TODO_SUMMARY_MAX]
 
 
-def call_todo(service, payload):
-    """Call one todo service on the core API. True if it landed.
+def todo_request(service, payload, return_response=False):
+    """Call one todo service on the core API. Returns (ok, parsed body or None).
 
-    Both callers run on a daemon thread off the request path, so an unreachable
-    or slow core API can only ever cost a log line - never a saved highlight or
-    a deleted one.
+    Split out from call_todo because one caller - the reconcile pass - needs the
+    body and the rest only need to know it landed. `ok` is about the request,
+    not the contents: a service that legitimately returns nothing still gives
+    (True, None).
     """
     entity = os.environ.get("TODO_ENTITY", "").strip()
     token = os.environ.get("SUPERVISOR_TOKEN", "")
     if not entity:
-        return False
+        return False, None
     if not token:
         log("warning", "todo_entity is set but SUPERVISOR_TOKEN is missing")
-        return False
+        return False, None
 
     body = dict(payload)
     body["entity_id"] = entity
 
+    # Services that return data only do so when asked. Without this the call
+    # succeeds and hands back an empty body, which would read as "nothing is
+    # open" - the exact misreading reconcile() must never make.
+    url = "http://supervisor/core/api/services/todo/" + service
+    if return_response:
+        url += "?return_response"
+
     request = urllib.request.Request(
-        "http://supervisor/core/api/services/todo/" + service,
+        url,
         data=json.dumps(body).encode("utf-8"),
         method="POST",
         headers={
@@ -269,12 +283,32 @@ def call_todo(service, payload):
 
     try:
         with urllib.request.urlopen(request, timeout=10) as response:
-            if response.status < 300:
-                return True
-            log("warning", "todo {} returned {}".format(service, response.status))
+            if response.status >= 300:
+                log("warning", "todo {} returned {}".format(service, response.status))
+                return False, None
+            if not return_response:
+                return True, None
+            raw = response.read().decode("utf-8")
     except (urllib.error.URLError, OSError) as err:
         log("warning", "todo {} failed: {}".format(service, err))
-    return False
+        return False, None
+
+    try:
+        return True, json.loads(raw)
+    except (ValueError, UnicodeDecodeError) as err:
+        log("warning", "todo {} returned unreadable JSON: {}".format(service, err))
+        return False, None
+
+
+def call_todo(service, payload):
+    """Call one todo service on the core API. True if it landed.
+
+    Both callers run on a daemon thread off the request path, so an unreachable
+    or slow core API can only ever cost a log line - never a saved highlight or
+    a deleted one.
+    """
+    ok, _ = todo_request(service, payload)
+    return ok
 
 
 def push_todo(record):
@@ -316,6 +350,112 @@ def complete_todo(record):
         return False
 
     return call_todo("update_item", {"item": summary, "status": "completed"})
+
+
+def open_todo_summaries():
+    """Summaries of every still-open item on the list, or None if unreadable.
+
+    `get_items` defaults to needs_action, so one call answers both halves of the
+    question this exists for: an item that pushed and is no longer in here has
+    been ticked off *or* deleted, and from out here those are the same event.
+
+    **None and an empty set are not the same thing and must never be conflated.**
+    Empty means the list has nothing open; None means the list could not be read.
+    reconcile() prunes on the first and does nothing on the second, and that
+    distinction is the only thing standing between an unreachable core API and
+    every note-bearing highlight in the store being deleted at once.
+    """
+    entity = os.environ.get("TODO_ENTITY", "").strip()
+    if not entity:
+        return None
+
+    ok, body = todo_request("get_items", {}, return_response=True)
+    if not ok or not isinstance(body, dict):
+        return None
+
+    # {"changed_states": [...], "service_response": {"<entity>": {"items": [...]}}}
+    # Checked a layer at a time rather than assumed: a shape change upstream has
+    # to surface as "cannot read", never as "nothing is open".
+    response = body.get("service_response")
+    if not isinstance(response, dict):
+        log("warning", "todo get_items returned no service_response")
+        return None
+
+    listing = response.get(entity)
+    if not isinstance(listing, dict):
+        log("warning", "todo get_items returned nothing for {}".format(entity))
+        return None
+
+    items = listing.get("items")
+    if not isinstance(items, list):
+        log("warning", "todo get_items returned no items for {}".format(entity))
+        return None
+
+    return {
+        item["summary"]
+        for item in items
+        if isinstance(item, dict) and isinstance(item.get("summary"), str)
+    }
+
+
+def reconcile():
+    """Delete annotations whose to-do item is no longer open. Count removed.
+
+    The inverse of push_todo, and the half that was missing until 1.11.0: a note
+    creates an item, and the item going away now takes the highlight with it.
+
+    complete_todo is deliberately NOT called for anything removed here. Store's
+    delete hands the record back so the caller can decide, and this is the one
+    caller that must decline - the item is already completed, or already gone.
+    """
+    summaries = open_todo_summaries()
+    if summaries is None:
+        return 0
+
+    removed = 0
+    for record in STORE.all():
+        # A bare highlight is a reading aid, not a task: it never had an item,
+        # so there is nothing here to reason about. The same guard covers a note
+        # whose push failed, which would otherwise be destroyed over an outage
+        # that happened while it was being written.
+        if not record.get("todo_pushed"):
+            continue
+        if record.get("todo_summary") in summaries:
+            continue
+        if STORE.delete(record["id"]) is not None:
+            removed += 1
+
+    if removed:
+        log("info", "cleared {} highlight(s) whose to-do item is done".format(removed))
+    return removed
+
+
+def reconcile_worker():
+    """Reconcile once per completed refresh pass, forever.
+
+    run.sh bumps REFRESH_MARKER_PATH after every pass - poll or sync-request
+    alike - so watching that file inherits poll_interval without a second timer
+    to keep in step with it, and makes the site's Sync button a manual "clear
+    now", which is the answer to a fifteen-minute default feeling slow.
+
+    Watching a file rather than exposing a route also keeps every mutation of
+    the store inside the process holding its lock. The sleep below is only how
+    often the marker is stat'd; the core API is called when it *changes*.
+    """
+    seen = read_marker(REFRESH_MARKER_PATH)
+    while True:
+        time.sleep(MARKER_POLL_SECONDS)
+        current = read_marker(REFRESH_MARKER_PATH)
+        if current == seen:
+            continue
+        seen = current
+        try:
+            reconcile()
+        except Exception as err:  # noqa: BLE001
+            # Broad on purpose. This thread is the only thing clearing done
+            # highlights; letting one bad pass kill it would fail silently and
+            # look exactly like the feature never having worked.
+            log("warning", "reconcile pass failed: {}".format(err))
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -463,6 +603,12 @@ def main():
             len(STORE.all()), BIND[0], BIND[1], destination
         ),
     )
+
+    # Only worth running when there is a list to reconcile against. Without an
+    # entity open_todo_summaries() returns None every pass anyway, so this would
+    # be a thread waking up forever to decide it has nothing to do.
+    if entity:
+        threading.Thread(target=reconcile_worker, daemon=True).start()
 
     server.serve_forever()
 
