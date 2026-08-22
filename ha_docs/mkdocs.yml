@@ -82,6 +82,12 @@ extra_css:
   - assets/diagrams.css
   - assets/annotate.css
 
+# The configured repository is content, never MkDocs configuration.  This hook
+# sanitizes the rendered page fragment and adds a page-specific CSP before the
+# trusted Material template is written.
+hooks:
+  - /opt/ha_docs/content_policy.py
+
 plugins:
   - search
 
@@ -91,3 +97,13 @@ plugins:
 exclude_docs: |
   .gitignore
   .claude/
+  *.html
+  *.htm
+  *.js
+  *.mjs
+  *.css
+  *.svg
+  *.xml
+  *.xsl
+  *.xslt
+  *.wasm

@@ -3,6 +3,8 @@ slug: "ha_docs"
 description: "Serves a git repo of Markdown as a searchable MkDocs site behind HA ingress."
 version: "1.5.0"
 url: "https://github.com/JustBeanie/ha-addons"
+breaking_versions:
+  - "1.4.0"
 
 arch:
   - amd64
@@ -17,6 +19,7 @@ boot: auto
 
 ingress: true
 ingress_port: 8099
+watchdog: "http://[HOST]:8099/health"
 panel_icon: "mdi:book-open-variant-outline"
 panel_title: "HA Docs"
 
@@ -28,6 +31,7 @@ options:
   # Placeholder - set this to your own docs repo in the add-on configuration.
   repository: "https://github.com/example/my-docs.git"
   branch: "main"
+  git_username: "x-access-token"
   poll_interval: 900
   site_name: "Docs"
   todo_entity: ""
@@ -35,9 +39,12 @@ options:
 
 schema:
   repository: "url"
-  branch: "str"
+  branch: "str(1,255)"
+  # Git's non-secret username for HTTPS token authentication. GitHub accepts
+  # x-access-token; other providers may require a different account name.
+  git_username: "str(1,128)"
   poll_interval: "int(60,86400)"
-  site_name: "str"
+  site_name: "str(1,100)"
   # Only needed if the docs repo is ever made private.
   git_token: "password?"
   # Where notes are mirrored, e.g. todo.docs_review. Unset = highlights and

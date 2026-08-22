@@ -1,5 +1,27 @@
 # Changelog
 
+## 1.4.0 - 2026-08-11
+
+Security hardening for repositories, rendered content, ingress, and notes.
+
+- Replaces the working clone with a validated HTTPS-only bare fetch and a
+  symlink-safe extractor. Symlinks, submodules, special files, traversal paths,
+  active static assets, and oversized trees are rejected before MkDocs runs.
+- Keeps private-repository tokens out of URLs, arguments, logs, Git metadata,
+  and build environments by using a short-lived restricted credential helper.
+- Sanitizes rendered Markdown, locks down Mermaid, and adds a restrictive
+  per-page Content Security Policy plus browser security headers.
+- Restricts the service to Supervisor ingress and adds a watchdog health route,
+  request/body limits, timeouts, rate limits, and bounded backend workers.
+- Makes annotation writes atomic and durable, enforces storage quotas and path
+  validation, and replaces per-request to-do threads with a durable bounded
+  retry queue.
+- Separates fetch, build, annotation, and web-server privileges. Only the
+  annotation service receives the Home Assistant API token.
+- Migrates the annotation store and removes legacy clones, generated sites, and
+  build stamps. Repository tokens used by older releases must be rotated because
+  old backups or snapshots may retain the credential-bearing Git metadata.
+
 ## 1.3.1 - 2026-08-07
 
 Security documentation correction for private-repository credentials.

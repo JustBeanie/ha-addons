@@ -15,9 +15,10 @@ only ever pulls.
 |---|---|---|
 | `repository` | *(placeholder)* | Repo to publish. Set this first. |
 | `branch` | `main` | Branch to follow. |
+| `git_username` | `x-access-token` | Non-secret HTTPS username used with `git_token`. The default is correct for GitHub. |
 | `poll_interval` | `900` | Seconds between checks. 60–86400. |
 | `site_name` | `Docs` | Title in the header and browser tab. |
-| `git_token` | *(unset)* | Personal access token. Only needed for a private repo. HA Docs never writes it to its log, but add-on configuration and status output containing it is sensitive. |
+| `git_token` | *(unset)* | Personal access token. Only needed for a private repo. It is never placed in a repository URL, process argument, Git configuration, or log. Add-on configuration containing it is still sensitive. |
 | `todo_entity` | *(unset)* | To-do list that notes are mirrored onto, e.g. `todo.docs_review`. Leave empty to keep notes inside the docs site. |
 
 ### Private repositories
@@ -27,8 +28,13 @@ scoped to **only** the docs repository, with **Repository permissions → Conten
 Read-only**. Paste it into `git_token`. Nothing else is needed — the add-on only
 ever reads.
 
-HA Docs uses the token to build the clone URL in memory. It logs only **Using
-authenticated access** and never logs the token or authenticated clone URL.
+HA Docs gives Git the token through a short-lived, permission-restricted
+credential file in `/run`. The file is removed immediately after each fetch.
+The token is never embedded in a URL or stored in the repository cache, and the
+fetch and build processes do not inherit the Supervisor API token.
+
+The default `git_username` is correct for GitHub. If another HTTPS Git provider
+requires the account name alongside a token, set that non-secret name here.
 
 The token is still stored in Supervisor options. Home Assistant intentionally
 allows authorized manager/admin callers to retrieve full add-on options,
@@ -39,6 +45,11 @@ does not remove it from those API responses. See the
 Treat all add-on configuration and status output as sensitive: never paste it
 into a chat, issue, or other public report. If such output is exposed, revoke and
 rotate the token immediately.
+
+**After upgrading from any release before 1.4.0, rotate the repository token.**
+Older releases embedded it in Git's remote URL, so it may remain in an old Home
+Assistant backup or storage snapshot even though 1.4.0 removes the live legacy
+checkout during migration. Treat pre-1.4.0 backups as sensitive.
 
 If you inspect Home Assistant through HA-MCP, enable its **Redact secrets**
 feature (`redact_secrets: true`) and restart HA-MCP before requesting detailed
@@ -56,6 +67,26 @@ stays exactly as GitHub renders it.
 - Relative `.md` links are rewritten automatically.
 - Full-text search is built in.
 - ` ```mermaid ` fenced blocks render as diagrams, the same as on GitHub.
+
+### Safe Markdown policy
+
+The repository is treated as untrusted input. HA Docs accepts Markdown, raster
+images, PDF, and plain-text files. It rejects symlinks, submodules, special
+files, HTML pages, JavaScript, CSS, SVG, XML, WebAssembly, dot-directories, and
+files that exceed the build limits: 10,000 files, 100 MiB total source data,
+10 MiB per passive asset, 2 MiB per Markdown file, 20 path components, 128
+bytes per component, and 512 bytes per path.
+
+Rendered Markdown is sanitized before it is inserted into the trusted Material
+theme. Ordinary headings, links, tables, code highlighting, admonitions,
+details, raster images, and `<br>` elements are retained. Raw scripts, event
+handlers, forms, frames, embedded objects, SVG, arbitrary styles, and unsafe URL
+schemes are removed. A repository that needs custom HTML, JavaScript, CSS, or SVG
+is intentionally outside this add-on's security model.
+
+Builds are staged and validated before they replace the current site. A bad Git
+tree, rejected file, sanitizer failure, or MkDocs failure leaves the previously
+built safe site online.
 
 ### Diagrams stay offline
 
@@ -101,7 +132,7 @@ Each entry in the drawer has a delete button, which works whichever doc the
 annotation belongs to. It takes two taps — the first arms it, the second deletes —
 because there is no undo.
 
-Annotations are stored by the add-on in `/data/annotations.json`, not in the
+Annotations are stored by the add-on in `/data/annotations/store.json`, not in the
 browser. That means the same set appears in the companion app and in a desktop
 browser, and survives an add-on upgrade, a reboot, or a cleared cache. It also
 means they are included in a Home Assistant backup.
@@ -123,8 +154,12 @@ than leaving it as written.
 You can still tick items off in Home Assistant as you deal with them — that has
 no effect on the highlight, which stays in the docs until you delete it.
 
-If the list is unreachable the note is still saved — the failure is logged and
-nothing is lost.
+If the list is unreachable the note is still saved. The to-do operation remains
+in a durable retry queue and uses an annotation-specific marker to reconcile an
+ambiguous add before retrying. Home Assistant's add-item action has no native
+idempotency key, so the marker sharply reduces duplicates but cannot guarantee
+exactly-once behavior for every third-party to-do provider. The annotation API
+reports work as pending or failed if it cannot complete after bounded retries.
 
 ### When a doc changes underneath a highlight
 
@@ -165,3 +200,13 @@ repository. The Supervisor shows it in the add-on page URL.
 - The site is fully self-contained; no CDN or web-font requests leave the box.
 - A failed `git fetch` or `mkdocs build` leaves the previously built site in
   place rather than blanking it. Check the add-on log.
+- The site and annotation API accept traffic only through Home Assistant
+  Supervisor ingress. The health endpoint is reserved for the Supervisor
+  watchdog.
+- HA Docs limits source-tree size, annotation count and size, request size,
+  concurrency, and request rates so one document or client cannot consume the
+  add-on indefinitely.
+- Annotation storage is capped at 2,000 records, 250 records per page, 8 KiB
+  per record, and 4 MiB total. Requests are capped at 64 KiB. New or growing
+  notes are rejected at capacity, while deletes and non-growing corrections
+  remain available.
