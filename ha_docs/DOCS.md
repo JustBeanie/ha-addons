@@ -198,6 +198,50 @@ Text inside Mermaid diagrams cannot be annotated: that subtree is replaced with
 a fresh SVG on every render and on every palette toggle, so no anchor in it
 would survive.
 
+## Checker status in the site header
+
+HA Docs runs two link checkers, and both used to report only into the add-on
+log — the one place you are not looking while reading the docs. The **link**
+button in the site header now shows what they are doing, and opens a panel with
+the detail. It is strictly read-only: it starts nothing and changes nothing in
+Home Assistant.
+
+The button changes to match whatever most needs acting on, in this order:
+
+| Indicator | Meaning |
+| --- | --- |
+| Red, with a count | The documentation source has broken anchors. **The site is not being rebuilt** — you are reading the last good commit. |
+| Dimmed | `report_doc_link_repairs` is off, so the Repair checker results below are stale by definition. |
+| Amber, with a count | That many automations or scripts have an open Docs-link Repair. |
+| Spinning | A Docs-link Repair scan is running; the panel shows how far along. |
+| Red, no count | The last scan stopped before it finished, or finished with failures. Check the add-on log. |
+| Plain | Everything resolves and no Repairs are open. |
+
+The panel has a section per checker:
+
+- **Documentation source** — how many links were checked and when. When any are
+  broken it lists them, because this is the failure that otherwise looks like
+  nothing happening at all: the anchor check gates the rebuild, so a broken link
+  leaves the site serving the previous commit indefinitely.
+- **Docs-link repairs** — whether a scan is idle, running, or was interrupted;
+  the last scan's healthy/raised/skipped/failed counts; and a row per open
+  Repair. Each row links straight to that automation or script in the editor,
+  and there is a link to Settings → System → Repairs. The last targeted
+  entity check is shown too, which is the quickest confirmation that editing a
+  description had the effect you expected.
+
+On a narrow screen the header has no room for a third button, so the same panel
+appears at the top of the highlights drawer instead, and the status dot moves
+onto the highlights button.
+
+The panel polls while it is open or while a scan is running, and slowly
+otherwise. It stops entirely when the page is not visible, so leaving the docs
+open in the companion app costs nothing.
+
+Status lives in `/data/scan/`, alongside the annotation store. Like everything
+else the add-on keeps, it is derived state — deleting it costs nothing more than
+the next scan.
+
 ## Forcing an immediate sync
 
 Use the **Sync** button in the site header. It asks the add-on to pull straight

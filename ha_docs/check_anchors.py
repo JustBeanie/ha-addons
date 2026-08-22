@@ -39,6 +39,7 @@ import urllib.parse
 import urllib.request
 
 import ghslug
+import scan_status
 
 
 TRACE = 5
@@ -144,16 +145,23 @@ def collect_links(repo: pathlib.Path):
 def check_source(repo: pathlib.Path) -> int:
     headings = collect_headings(repo)
     total = bad = 0
+    # Collected as well as logged, because a non-zero result here stops the
+    # rebuild - so the site keeps serving the previous commit, and the reader
+    # needs to see why from the site rather than from the add-on log.
+    broken: list[dict[str, str]] = []
     for src, target_file, anchor, raw in collect_links(repo):
         total += 1
         slugs = headings.get(target_file)
         if slugs is None:
             LOGGER.warning("[source] missing file: %s -> %s", src, raw)
             bad += 1
+            broken.append({"source": src.as_posix(), "target": raw, "problem": "missing file"})
         elif anchor not in slugs:
             LOGGER.warning("[source] broken anchor: %s -> %s", src, raw)
             bad += 1
+            broken.append({"source": src.as_posix(), "target": raw, "problem": "broken anchor"})
     LOGGER.info("[source] anchor check complete: checked=%d broken=%d", total, bad)
+    scan_status.write_source(total, bad, broken)
     return bad
 
 
@@ -398,6 +406,13 @@ def check_ha(repo: pathlib.Path, api: CoreApi, github_base: str, report: bool, a
     detailed_headings = headings_with_text(repo)
     index = entity_index_targets(repo)
     failures = raised = healthy = removal_attempts = skipped_missing_config = 0
+    # Only a full scan reports a whole-instance picture worth recording as one;
+    # a targeted check records its single verdict instead. `scan_state` starts
+    # pessimistic so that an exception on the way out is reported as a failure
+    # rather than as a scan that quietly succeeded.
+    full_scan = selected_entity_ids is None
+    issues: list[dict[str, str | None]] = []
+    scan_state = "failed"
     if selected_entity_ids is None:
         entity_ids = api.entity_ids()
         scan_kind = "full"
@@ -427,96 +442,139 @@ def check_ha(repo: pathlib.Path, api: CoreApi, github_base: str, report: bool, a
         "[ha] Docs-link Repair scan started: kind=%s entities=%d report_only=%s concurrency=%d progress_every=%d heartbeat_every=%ds",
         scan_kind, len(entity_ids), report, concurrency, progress_interval, heartbeat_interval,
     )
+    if full_scan:
+        scan_status.begin_full(len(entity_ids), heartbeat_interval)
 
-    def read_config(entity_id: str):
-        try:
-            return entity_id, api.get_config(entity_id), None
-        except RuntimeError as exc:
-            return entity_id, None, exc
+    try:
+        def read_config(entity_id: str):
+            try:
+                return entity_id, api.get_config(entity_id), None
+            except RuntimeError as exc:
+                return entity_id, None, exc
 
-    # Reads are bounded and parallel; Repair actions remain ordered and serial
-    # below so repeated scans update a given Spook issue deterministically.
-    results = {}
-    with ThreadPoolExecutor(max_workers=concurrency, thread_name_prefix="ha-docs") as executor:
-        futures = {executor.submit(read_config, entity_id): entity_id for entity_id in entity_ids}
-        pending = set(futures)
-        completed = 0
-        LOGGER.info("[ha] Docs-link scan dispatched: queued=%d active_workers=%d", len(futures), concurrency)
-        while pending:
-            done, pending = wait(pending, timeout=heartbeat_interval, return_when=FIRST_COMPLETED)
-            if not done:
-                active = sum(future.running() for future in pending)
-                LOGGER.info(
-                    "[ha] Docs-link scan waiting for HA config API: completed=%d total=%d active=%d queued=%d",
-                    completed, len(entity_ids), active, len(pending) - active,
-                )
+        # Reads are bounded and parallel; Repair actions remain ordered and serial
+        # below so repeated scans update a given Spook issue deterministically.
+        results = {}
+        with ThreadPoolExecutor(max_workers=concurrency, thread_name_prefix="ha-docs") as executor:
+            futures = {executor.submit(read_config, entity_id): entity_id for entity_id in entity_ids}
+            pending = set(futures)
+            completed = 0
+            LOGGER.info("[ha] Docs-link scan dispatched: queued=%d active_workers=%d", len(futures), concurrency)
+            while pending:
+                done, pending = wait(pending, timeout=heartbeat_interval, return_when=FIRST_COMPLETED)
+                if not done:
+                    active = sum(future.running() for future in pending)
+                    LOGGER.info(
+                        "[ha] Docs-link scan waiting for HA config API: completed=%d total=%d active=%d queued=%d",
+                        completed, len(entity_ids), active, len(pending) - active,
+                    )
+                    # Also bumps the status heartbeat.  A scan legitimately
+                    # waiting on a slow config API must not read as stalled.
+                    scan_status.update_full(completed=completed)
+                    continue
+                for future in done:
+                    entity_id, config, read_error = future.result()
+                    results[entity_id] = config, read_error
+                    completed += 1
+                    if completed == 1 or completed % progress_interval == 0 or completed == len(entity_ids):
+                        LOGGER.info("[ha] Docs-link scan progress: completed=%d total=%d current=%s", completed, len(entity_ids), entity_id)
+                    scan_status.update_full(completed=completed, current=entity_id)
+
+        for entity_id in entity_ids:
+            config, read_error = results[entity_id]
+            if read_error is not None:
+                if isinstance(read_error, CoreApiError) and read_error.status == 404:
+                    # A registry state can outlive its storage configuration after
+                    # an upgrade or manual deletion.  It is neither a bad Docs
+                    # link nor a failed scan; clean any old HA Docs issue and let
+                    # Home Assistant own the stale-record cleanup.
+                    skipped_missing_config += 1
+                    LOGGER.info("[ha] Docs-link config skipped: entity=%s reason=configuration-missing", entity_id)
+                    audit(audit_file, entity_id=entity_id, outcome="skipped-missing-config")
+                    if report:
+                        try:
+                            api.call_service("repairs", "remove", {"issue_id": repair_issue_id(entity_id)})
+                            removal_attempts += 1
+                        except RuntimeError:
+                            pass
+                    if not full_scan:
+                        scan_status.write_entity(entity_id, "skipped", reason="configuration missing")
+                    continue
+                LOGGER.warning("[ha] Docs-link config read failed: entity=%s error=%s", entity_id, read_error)
+                audit(audit_file, entity_id=entity_id, outcome="failed", reason=f"configuration read failed: {read_error}")
+                failures += 1
+                if not full_scan:
+                    scan_status.write_entity(entity_id, "failed", reason="configuration read failed")
                 continue
-            for future in done:
-                entity_id, config, read_error = future.result()
-                results[entity_id] = config, read_error
-                completed += 1
-                if completed == 1 or completed % progress_interval == 0 or completed == len(entity_ids):
-                    LOGGER.info("[ha] Docs-link scan progress: completed=%d total=%d current=%s", completed, len(entity_ids), entity_id)
-
-    for entity_id in entity_ids:
-        config, read_error = results[entity_id]
-        if read_error is not None:
-            if isinstance(read_error, CoreApiError) and read_error.status == 404:
-                # A registry state can outlive its storage configuration after
-                # an upgrade or manual deletion.  It is neither a bad Docs
-                # link nor a failed scan; clean any old HA Docs issue and let
-                # Home Assistant own the stale-record cleanup.
-                skipped_missing_config += 1
-                LOGGER.info("[ha] Docs-link config skipped: entity=%s reason=configuration-missing", entity_id)
-                audit(audit_file, entity_id=entity_id, outcome="skipped-missing-config")
+            outcome, replacement, rule = reconcile_description(
+                entity_id, config, repo, github_base, headings, detailed_headings, index
+            )
+            if outcome == "valid":
+                healthy += 1
+                LOGGER.debug("[ha] Docs link valid: entity=%s", entity_id)
                 if report:
                     try:
                         api.call_service("repairs", "remove", {"issue_id": repair_issue_id(entity_id)})
                         removal_attempts += 1
+                        LOGGER.debug("[ha] Repair removal requested: entity=%s", entity_id)
                     except RuntimeError:
+                        # No pre-existing issue is normal; the remove action is
+                        # deliberately best-effort and must not mark a valid link bad.
                         pass
+                if not full_scan:
+                    # Recorded even though the audit file deliberately never
+                    # records a healthy verdict: this is what clears a repaired
+                    # entity from the site panel before the next full scan.
+                    scan_status.write_entity(entity_id, "valid")
                 continue
-            LOGGER.warning("[ha] Docs-link config read failed: entity=%s error=%s", entity_id, read_error)
-            audit(audit_file, entity_id=entity_id, outcome="failed", reason=f"configuration read failed: {read_error}")
-            failures += 1
-            continue
-        outcome, replacement, rule = reconcile_description(
-            entity_id, config, repo, github_base, headings, detailed_headings, index
+            try:
+                api.call_service("repairs", "create", {
+                    "issue_id": repair_issue_id(entity_id),
+                    "title": f"HA Docs link needs repair: {entity_id}",
+                    "description": repair_instruction(entity_id, config, outcome, replacement, rule),
+                    "severity": "warning",
+                    "persistent": True,
+                })
+            except RuntimeError as exc:
+                LOGGER.error("[ha] Repair report failed: entity=%s error=%s", entity_id, exc)
+                audit(audit_file, entity_id=entity_id, outcome="failed", reason=f"could not raise repair: {exc}")
+                failures += 1
+                if not full_scan:
+                    scan_status.write_entity(entity_id, "failed", reason="could not raise repair")
+                continue
+            raised += 1
+            # config_id is what the site panel needs to deep-link into the
+            # automation or script editor.  getattr because a test double is
+            # not obliged to carry CoreApi's identifier cache.
+            config_id = getattr(api, "config_identifiers", {}).get(entity_id)
+            if full_scan:
+                issues.append({
+                    "entity_id": entity_id, "reason": outcome,
+                    "rule": rule, "config_id": config_id,
+                })
+            else:
+                scan_status.write_entity(
+                    entity_id, "repair-raised", reason=outcome, rule=rule, config_id=config_id
+                )
+            audit(audit_file, entity_id=entity_id, outcome="repair-raised", reason=outcome, repair_rule=rule)
+            LOGGER.warning("[ha] Repair raised: entity=%s rule=%s location=Settings > System > Repairs", entity_id, rule or "manual-review")
+        LOGGER.info(
+            "[ha] Docs-link Repair scan complete: healthy=%d repairs_raised=%d repair_removals_requested=%d skipped_missing_config=%d failures=%d",
+            healthy, raised, removal_attempts, skipped_missing_config, failures,
         )
-        if outcome == "valid":
-            healthy += 1
-            LOGGER.debug("[ha] Docs link valid: entity=%s", entity_id)
-            if report:
-                try:
-                    api.call_service("repairs", "remove", {"issue_id": repair_issue_id(entity_id)})
-                    removal_attempts += 1
-                    LOGGER.debug("[ha] Repair removal requested: entity=%s", entity_id)
-                except RuntimeError:
-                    # No pre-existing issue is normal; the remove action is
-                    # deliberately best-effort and must not mark a valid link bad.
-                    pass
-            continue
-        try:
-            api.call_service("repairs", "create", {
-                "issue_id": repair_issue_id(entity_id),
-                "title": f"HA Docs link needs repair: {entity_id}",
-                "description": repair_instruction(entity_id, config, outcome, replacement, rule),
-                "severity": "warning",
-                "persistent": True,
-            })
-        except RuntimeError as exc:
-            LOGGER.error("[ha] Repair report failed: entity=%s error=%s", entity_id, exc)
-            audit(audit_file, entity_id=entity_id, outcome="failed", reason=f"could not raise repair: {exc}")
-            failures += 1
-            continue
-        raised += 1
-        audit(audit_file, entity_id=entity_id, outcome="repair-raised", reason=outcome, repair_rule=rule)
-        LOGGER.warning("[ha] Repair raised: entity=%s rule=%s location=Settings > System > Repairs", entity_id, rule or "manual-review")
-    LOGGER.info(
-        "[ha] Docs-link Repair scan complete: healthy=%d repairs_raised=%d repair_removals_requested=%d skipped_missing_config=%d failures=%d",
-        healthy, raised, removal_attempts, skipped_missing_config, failures,
-    )
-    return failures
+        scan_state = "complete" if not failures else "failed"
+        return failures
+    finally:
+        # In a finally so that an exception on the way out still lands a
+        # terminal record.  Without it the status file would sit on "running"
+        # until the reader aged its heartbeat out, reporting a scan that is no
+        # longer happening.
+        if full_scan:
+            scan_status.finish_full(
+                scan_state, issues,
+                healthy=healthy, raised=raised, removals=removal_attempts,
+                skipped=skipped_missing_config, failures=failures,
+            )
 
 
 def main() -> int:

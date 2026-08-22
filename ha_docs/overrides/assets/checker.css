@@ -1,0 +1,269 @@
+/* --------------------------------------------------------------------------
+   Live status for the two HA Docs link checkers.
+
+   Paired with checker.js. Kept apart from annotate.css for the same reason the
+   scripts are apart: nothing here is about highlights, and the only shared
+   surface is the .anno-ui positioning base the drawer borrows.
+   -------------------------------------------------------------------------- */
+
+/* Borrows Material's own header button sizing, like .anno-sync does. */
+.chk-open {
+  cursor: pointer;
+  border: none;
+  background: transparent;
+  color: currentColor;
+  display: flex;
+  align-items: center;
+  position: relative;
+}
+
+/* Below this the header has no room for a third custom button, so the panel
+   renders into the highlights drawer instead. Keep this value in step with
+   NARROW in checker.js. */
+@media screen and (max-width: 44.9375em) {
+  .chk-open {
+    display: none;
+  }
+}
+
+.chk-open--busy svg {
+  animation: chk-spin 1.1s linear infinite;
+}
+
+/* Held still for anyone who has asked for reduced motion. The badge and the
+   panel both still say what is happening, so the spin is never the only cue. */
+@media (prefers-reduced-motion: reduce) {
+  .chk-open--busy svg {
+    animation: none;
+    opacity: 0.6;
+  }
+}
+
+@keyframes chk-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.chk-open--error svg,
+.chk-open--stalled svg {
+  color: var(--md-typeset-del-color, #f5504e);
+}
+
+.chk-open--warn svg {
+  color: #f0a020;
+}
+
+.chk-open--off svg {
+  opacity: 0.45;
+}
+
+.chk-open__badge {
+  position: absolute;
+  top: 0;
+  right: 0;
+  min-width: 1rem;
+  padding: 0 0.15rem;
+  border-radius: 0.5rem;
+  background: #f0a020;
+  color: #1b1b1b;
+  font-size: 0.5rem;
+  line-height: 1rem;
+  text-align: center;
+  font-weight: 700;
+}
+
+.chk-open--error .chk-open__badge {
+  background: var(--md-typeset-del-color, #f5504e);
+  color: #fff;
+}
+
+/* The same signal on the highlights button while ours is hidden. */
+.chk-dot {
+  position: absolute;
+  top: 0.15rem;
+  left: 0.15rem;
+  width: 0.4rem;
+  height: 0.4rem;
+  border-radius: 50%;
+  background: #f0a020;
+}
+
+.chk-dot--error,
+.chk-dot--stalled {
+  background: var(--md-typeset-del-color, #f5504e);
+}
+
+.chk-dot--busy {
+  background: var(--md-accent-fg-color, #526cfe);
+}
+
+.chk-dot--off {
+  background: var(--md-default-fg-color--lighter, #999);
+}
+
+/* --------------------------------------------------------------------------
+   Drawer (wide layout)
+   -------------------------------------------------------------------------- */
+
+.chk-drawer {
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(26rem, 100vw);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--md-default-bg-color);
+  box-shadow: var(--md-shadow-z2, 0 0.2rem 0.5rem rgba(0, 0, 0, 0.3));
+}
+
+.chk-head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.6rem 0.8rem;
+  background: var(--md-primary-fg-color);
+  color: var(--md-primary-bg-color);
+}
+
+.chk-head h2 {
+  margin: 0;
+  font-size: 0.8rem;
+  font-weight: 700;
+  flex: 1;
+}
+
+.chk-close {
+  border: none;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  padding: 0;
+  display: flex;
+}
+
+.chk-body {
+  overflow-y: auto;
+  padding: 0.6rem 0.8rem 1.2rem;
+}
+
+/* --------------------------------------------------------------------------
+   Sections, shared by both layouts
+   -------------------------------------------------------------------------- */
+
+.anno-drawer__extra:not(:empty) {
+  padding: 0.6rem 0.8rem;
+  border-bottom: 1px solid var(--md-default-fg-color--lightest, rgba(0, 0, 0, 0.1));
+}
+
+.chk-section + .chk-section {
+  margin-top: 0.9rem;
+}
+
+.chk-section__title {
+  margin: 0 0 0.3rem;
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--md-default-fg-color--light);
+}
+
+.chk-line {
+  margin: 0.15rem 0;
+  font-weight: 600;
+}
+
+.chk-line--ok {
+  color: var(--md-default-fg-color);
+  font-weight: 400;
+}
+
+.chk-line--muted {
+  color: var(--md-default-fg-color--light);
+  font-weight: 400;
+}
+
+.chk-line--busy {
+  color: var(--md-accent-fg-color, #526cfe);
+}
+
+.chk-line--warn {
+  color: #b06d00;
+}
+
+.chk-line--error {
+  color: var(--md-typeset-del-color, #f5504e);
+}
+
+.chk-line--error-note {
+  color: var(--md-default-fg-color);
+  font-weight: 400;
+  margin: 0.15rem 0 0.4rem;
+}
+
+.chk-meta {
+  margin: 0.15rem 0;
+  color: var(--md-default-fg-color--light);
+}
+
+/* --------------------------------------------------------------------------
+   Lists
+   -------------------------------------------------------------------------- */
+
+.chk-list,
+.chk-issues {
+  list-style: none;
+  margin: 0.3rem 0 0;
+  padding: 0;
+}
+
+.chk-list__item {
+  margin: 0 0 0.3rem;
+  overflow-wrap: anywhere;
+}
+
+.chk-code {
+  font-size: 0.65rem;
+  background: var(--md-code-bg-color);
+  border-radius: 0.15rem;
+  padding: 0 0.2rem;
+}
+
+.chk-arrow {
+  color: var(--md-default-fg-color--light);
+}
+
+.chk-tag {
+  margin-left: 0.3rem;
+  font-size: 0.6rem;
+  color: var(--md-default-fg-color--light);
+}
+
+.chk-issue {
+  padding: 0.35rem 0;
+  border-top: 1px solid var(--md-default-fg-color--lightest, rgba(0, 0, 0, 0.1));
+}
+
+.chk-issue__head {
+  display: flex;
+  align-items: baseline;
+  gap: 0.3rem;
+}
+
+.chk-issue__entity {
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.chk-issue__reason {
+  margin: 0.1rem 0 0;
+  color: var(--md-default-fg-color--light);
+}
+
+.chk-action {
+  display: inline-block;
+  margin-top: 0.5rem;
+  font-weight: 700;
+}

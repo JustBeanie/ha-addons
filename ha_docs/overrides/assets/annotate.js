@@ -862,11 +862,21 @@
     updateBadge();
   }
 
+  // ---------------------------------------------------------------------------
+  // Extension point
+  //
+  // checker.js has no header button of its own on a narrow screen - three of
+  // them plus the hamburger, title and search does not fit - so it renders into
+  // this drawer instead. The contract is deliberately just a mount node and two
+  // events: anything more and these two files should have been one file.
+  // ---------------------------------------------------------------------------
+
   function toggleDrawer() {
     if (drawer) {
       disarm();
       drawer.remove();
       drawer = null;
+      document.dispatchEvent(new CustomEvent("ha-docs:drawer-close"));
       return;
     }
     drawer = el("div", "anno-ui anno-drawer");
@@ -881,8 +891,11 @@
     head.appendChild(close);
     drawer.appendChild(head);
 
+    // Empty, and stays empty unless checker.js mounts into it.
+    drawer.appendChild(el("div", "anno-drawer__extra"));
     drawer.appendChild(el("div", "anno-drawer__body"));
     document.body.appendChild(drawer);
+    document.dispatchEvent(new CustomEvent("ha-docs:drawer-open"));
 
     // Re-fetch on open: the other device may have added something since this
     // page was loaded.

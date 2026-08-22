@@ -3,6 +3,8 @@
 import copy
 import importlib.util
 import io
+import json
+import os
 import pathlib
 import re
 import sys
@@ -18,6 +20,10 @@ SPEC = importlib.util.spec_from_file_location("check_anchors", ROOT / "ha_docs" 
 CHECK = importlib.util.module_from_spec(SPEC)
 assert SPEC.loader
 SPEC.loader.exec_module(CHECK)
+
+# check_anchors imports it, so this is the same module object the scanner
+# writes through - setting the environment here reaches both.
+import scan_status as SCAN  # noqa: E402
 
 BASE = "https://github.com/example/docs/blob/main"
 
@@ -296,6 +302,167 @@ class CheckAnchorsTests(unittest.TestCase):
         self.assertEqual(CHECK.repair_issue_id("script.Wake-Up Stage 1"), "ha_docs_link_script_wake_up_stage_1")
         self.assertNotEqual(CHECK.repair_issue_id("script.one"), CHECK.repair_issue_id("script.two"))
 
+
+class ScanStatusTests(unittest.TestCase):
+    """The status files the site panel reads, and how they merge."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.repo = pathlib.Path(self.tmp.name) / "repo"
+        (self.repo / "docs").mkdir(parents=True)
+        (self.repo / "docs" / "foo.md").write_text("# Target Title\n", encoding="utf-8")
+        (self.repo / "README.md").write_text("[ok](docs/foo.md#target-title)\n", encoding="utf-8")
+        self.audit = pathlib.Path(self.tmp.name) / "audit.jsonl"
+        self.status = pathlib.Path(self.tmp.name) / "status"
+        os.environ["HA_DOCS_SCAN_STATUS_DIR"] = str(self.status)
+        # Module state outlives a single scan, so a test that left one open
+        # would otherwise leak into the next.
+        SCAN._full = None
+
+    def tearDown(self):
+        os.environ.pop("HA_DOCS_SCAN_STATUS_DIR", None)
+        SCAN._full = None
+        self.tmp.cleanup()
+
+    def read(self, *parts):
+        return json.loads(self.status.joinpath(*parts).read_text(encoding="utf-8"))
+
+    def config(self, marker="\U0001F4D6 Docs:", url=f"{BASE}/docs/foo.md#target-title"):
+        return {"alias": "Fixture", "sequence": [{"stop": "ok"}], "description": f"Test\n\n{marker} {url}"}
+
+    def write_entity_record(self, entity_id, verdict, finished, **extra):
+        """A per-entity file with an explicit timestamp, so merge order is exact."""
+        path = self.status / "entity" / (SCAN.entity_slug(entity_id) + ".json")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        record = {"entity_id": entity_id, "verdict": verdict, "finished": finished}
+        record.update(extra)
+        path.write_text(json.dumps(record), encoding="utf-8")
+
+    def finish_full_with(self, issues):
+        SCAN.begin_full(len(issues), 10)
+        SCAN.finish_full("complete", issues, healthy=0, raised=len(issues))
+        return self.read("full.json")["issues_at"]
+
+    def test_begin_full_publishes_a_running_record(self):
+        SCAN.begin_full(7, 10)
+        record = self.read("full.json")
+        self.assertEqual(record["state"], "running")
+        self.assertEqual(record["total"], 7)
+        self.assertEqual(record["completed"], 0)
+        self.assertTrue(record["heartbeat"])
+
+    def test_full_scan_terminal_record_matches_its_summary(self):
+        api = FakeApi({"script.valid": self.config(), "script.legacy": self.config(marker="Docs:")})
+        failures = CHECK.check_ha(self.repo, api, BASE, True, self.audit)
+        self.assertEqual(failures, 0)
+        record = self.read("full.json")
+        self.assertEqual(record["state"], "complete")
+        self.assertEqual(record["healthy"], 1)
+        self.assertEqual(record["raised"], 1)
+        self.assertEqual(record["failures"], 0)
+        self.assertEqual([issue["entity_id"] for issue in record["issues"]], ["script.legacy"])
+        self.assertEqual(record["issues"][0]["rule"], "legacy-marker")
+
+    def test_targeted_scan_records_a_healthy_verdict(self):
+        # The audit file deliberately never records a healthy link, so without
+        # this the panel could not tell a repaired entity is now fine.
+        api = FakeApi({"script.valid": self.config()})
+        CHECK.check_ha(self.repo, api, BASE, True, self.audit, selected_entity_ids=["script.valid"])
+        self.assertEqual(self.read("entity", "script_valid.json")["verdict"], "valid")
+        self.assertFalse((self.status / "full.json").exists())
+
+    def test_targeted_scan_records_a_raised_repair(self):
+        api = FakeApi({"script.legacy": self.config(marker="Docs:")})
+        CHECK.check_ha(self.repo, api, BASE, True, self.audit, selected_entity_ids=["script.legacy"])
+        record = self.read("entity", "script_legacy.json")
+        self.assertEqual(record["verdict"], "repair-raised")
+        self.assertEqual(record["rule"], "legacy-marker")
+
+    def test_newer_valid_verdict_clears_a_row_from_the_full_scan(self):
+        at = self.finish_full_with([{"entity_id": "script.legacy", "reason": "legacy", "rule": "legacy-marker"}])
+        self.write_entity_record("script.legacy", "valid", at + 5)
+        self.assertEqual(SCAN.read_status()["repairs"]["issues"], [])
+
+    def test_newer_raised_verdict_adds_a_row(self):
+        at = self.finish_full_with([])
+        self.write_entity_record("automation.late", "repair-raised", at + 5,
+                                 reason="broken", rule=None, config_id="1740000000001")
+        issues = SCAN.read_status()["repairs"]["issues"]
+        self.assertEqual([issue["entity_id"] for issue in issues], ["automation.late"])
+        self.assertEqual(issues[0]["config_id"], "1740000000001")
+
+    def test_verdict_older_than_the_full_scan_is_ignored(self):
+        at = self.finish_full_with([{"entity_id": "script.legacy", "reason": "legacy", "rule": "legacy-marker"}])
+        self.write_entity_record("script.legacy", "valid", at - 5)
+        self.assertEqual(len(SCAN.read_status()["repairs"]["issues"]), 1)
+
+    def test_failed_verdict_leaves_a_known_row_alone(self):
+        # A check that could not reach a conclusion is not evidence the entity
+        # is fine, so it must not clear the row.
+        at = self.finish_full_with([{"entity_id": "script.legacy", "reason": "legacy", "rule": "legacy-marker"}])
+        self.write_entity_record("script.legacy", "failed", at + 5)
+        self.assertEqual(len(SCAN.read_status()["repairs"]["issues"]), 1)
+
+    def test_stale_heartbeat_reads_as_stalled(self):
+        SCAN.begin_full(5, 10)
+        record = self.read("full.json")
+        record["heartbeat"] = time.time() - (3 * 10 + SCAN.STALE_GRACE + 5)
+        (self.status / "full.json").write_text(json.dumps(record), encoding="utf-8")
+        self.assertEqual(SCAN.read_status()["repairs"]["state"], "stalled")
+
+    def test_running_scan_that_is_still_reporting_is_not_stalled(self):
+        SCAN.begin_full(5, 10)
+        self.assertEqual(SCAN.read_status()["repairs"]["state"], "running")
+
+    def test_running_scan_keeps_showing_the_previous_repairs(self):
+        # Otherwise the panel blanks its list for the minutes a full scan takes.
+        self.finish_full_with([{"entity_id": "script.legacy", "reason": "legacy", "rule": "legacy-marker"}])
+        SCAN.begin_full(5, 10)
+        status = SCAN.read_status()
+        self.assertEqual(status["repairs"]["state"], "running")
+        self.assertEqual([issue["entity_id"] for issue in status["repairs"]["issues"]], ["script.legacy"])
+
+    def test_finishing_a_full_scan_prunes_superseded_entity_files(self):
+        self.write_entity_record("script.legacy", "repair-raised", time.time())
+        SCAN.begin_full(1, 10)
+        SCAN.finish_full("complete", [], healthy=1, raised=0)
+        self.assertEqual(list((self.status / "entity").glob("*.json")), [])
+
+    def test_source_check_records_its_broken_links(self):
+        (self.repo / "README.md").write_text(
+            "[bad](docs/foo.md#no-such-heading)\n[gone](docs/missing.md#x)\n", encoding="utf-8")
+        bad = CHECK.check_source(self.repo)
+        record = self.read("source.json")
+        self.assertEqual(bad, 2)
+        self.assertEqual(record["broken"], 2)
+        self.assertEqual(record["checked"], 2)
+        self.assertFalse(record["truncated"])
+        self.assertEqual(
+            sorted(example["problem"] for example in record["examples"]),
+            ["broken anchor", "missing file"],
+        )
+
+    def test_clean_source_check_records_zero(self):
+        self.assertEqual(CHECK.check_source(self.repo), 0)
+        record = self.read("source.json")
+        self.assertEqual(record["broken"], 0)
+        self.assertEqual(record["examples"], [])
+
+    def test_status_writing_is_opt_in(self):
+        # Unset means every writer is a no-op, so running the checker by hand on
+        # a workstation cannot scatter status files across it.
+        os.environ.pop("HA_DOCS_SCAN_STATUS_DIR")
+        self.assertEqual(CHECK.check_source(self.repo), 0)
+        self.assertFalse(self.status.exists())
+        self.assertEqual(SCAN.read_status()["repairs"], {"state": "unknown", "issues": []})
+
+    def test_unwritable_status_dir_never_changes_a_result(self):
+        blocker = pathlib.Path(self.tmp.name) / "blocker"
+        blocker.write_text("not a directory", encoding="utf-8")
+        os.environ["HA_DOCS_SCAN_STATUS_DIR"] = str(blocker / "scan")
+        self.assertEqual(CHECK.check_source(self.repo), 0)
+        api = FakeApi({"script.valid": self.config()})
+        self.assertEqual(CHECK.check_ha(self.repo, api, BASE, True, self.audit), 0)
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,5 +1,38 @@
 # Changelog
 
+## 1.10.0 - 2026-08-22
+
+The link checkers stop reporting only into the log.
+
+- **Both checkers now have a live indicator in the site header**, with a panel
+  showing what they are doing. Until now the documentation-source anchor check
+  and the Docs-link Repair scan reported only into the add-on log, an
+  append-only audit file, and the Repairs dashboard — none of which you are
+  looking at while reading the docs.
+- **A broken source anchor is finally visible where it matters.** That check
+  gates the rebuild, so a broken link leaves the site serving the previous
+  commit for as long as it takes someone to open the log and notice. The panel
+  now says so in as many words, and lists the offending links.
+- The Repair section reports scan state and live progress, the last scan's
+  healthy/raised/skipped/failed counts, and a row per open Repair linking
+  straight into that automation or script's editor. The last targeted entity
+  check is shown as well, so editing a description gives immediate feedback.
+- A repaired entity now leaves the list without waiting for the next full scan.
+  The audit file deliberately never records a healthy verdict, so the targeted
+  checker records one separately — that is what lets a row disappear.
+- An interrupted scan reports as interrupted rather than as one that is still
+  running. The reader ages out a status record whose scan has stopped bumping
+  its heartbeat, which covers a crash, a shutdown mid-scan, and a container
+  restart alike.
+- On a narrow screen the panel moves into the highlights drawer rather than
+  adding a third header button, which does not fit beside the hamburger, title
+  and search.
+- New `UPSTREAM.md` records where MkDocs 2.0 leaves this add-on, why the pinned
+  build is not affected, and why Zensical is not yet an exit. Documentation
+  only; no behaviour change.
+- Status is written to `/data/scan/` only when the add-on asks for it, so
+  running `check_anchors.py` by hand on a workstation still writes nothing.
+
 ## 1.9.0 - 2026-08-20
 
 An icon, and the reading side of the site catching up with the backend.
