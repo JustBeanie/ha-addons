@@ -355,9 +355,16 @@ def complete_todo(record):
 def open_todo_summaries():
     """Summaries of every still-open item on the list, or None if unreadable.
 
-    `get_items` defaults to needs_action, so one call answers both halves of the
-    question this exists for: an item that pushed and is no longer in here has
-    been ticked off *or* deleted, and from out here those are the same event.
+    One call answers both halves of the question this exists for: an item that
+    pushed and is no longer in here has been ticked off *or* deleted, and from
+    out here those are the same event.
+
+    ⚠️ `status` is passed explicitly and must stay that way. The service schema
+    declares a `needs_action` default, but Home Assistant applies field defaults
+    when rendering the UI form, **not** when a service is called over the API -
+    so omitting it returns completed items too, every summary matches, and the
+    pass silently prunes nothing forever. It fails closed and logs nothing,
+    which is exactly how it survived a first deploy unnoticed.
 
     **None and an empty set are not the same thing and must never be conflated.**
     Empty means the list has nothing open; None means the list could not be read.
@@ -369,7 +376,9 @@ def open_todo_summaries():
     if not entity:
         return None
 
-    ok, body = todo_request("get_items", {}, return_response=True)
+    ok, body = todo_request(
+        "get_items", {"status": ["needs_action"]}, return_response=True
+    )
     if not ok or not isinstance(body, dict):
         return None
 
@@ -425,8 +434,16 @@ def reconcile():
         if STORE.delete(record["id"]) is not None:
             removed += 1
 
-    if removed:
-        log("info", "cleared {} highlight(s) whose to-do item is done".format(removed))
+    # Logged every pass, not only when something is removed. A pass that finds
+    # nothing to do looks identical from the outside to a pass that never ran,
+    # and telling those apart is exactly what was missing when 1.11.0 shipped
+    # with a get_items call that quietly matched everything.
+    log(
+        "info",
+        "reconcile: {} item(s) open, {} highlight(s) cleared".format(
+            len(summaries), removed
+        ),
+    )
     return removed
 
 
@@ -442,6 +459,7 @@ def reconcile_worker():
     the store inside the process holding its lock. The sleep below is only how
     often the marker is stat'd; the core API is called when it *changes*.
     """
+    log("info", "reconcile worker watching {}".format(REFRESH_MARKER_PATH))
     seen = read_marker(REFRESH_MARKER_PATH)
     while True:
         time.sleep(MARKER_POLL_SECONDS)

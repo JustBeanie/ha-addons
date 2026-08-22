@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.11.1 - 2026-08-22
+
+Fixes the reconcile pass shipped in 1.11.0, which never cleared anything.
+
+- **`get_items` now asks for open items explicitly.** 1.11.0 relied on the
+  service schema's `needs_action` default. Home Assistant applies field defaults
+  when it renders the UI form, not when a service is called over the API, so the
+  call came back with completed items included too. Every stored summary matched
+  something still on the list, so every pass cleared nothing.
+- **Every pass now logs what it saw**, not only the passes that remove
+  something. That is what made the above so hard to see: a pass finding nothing
+  to do was indistinguishable in the log from a worker that had never started,
+  and both look like the feature simply not working. The worker also announces
+  itself at startup.
+
 ## 1.11.0 - 2026-08-22
 
 Working through the to-do list now cleans up the docs behind you.

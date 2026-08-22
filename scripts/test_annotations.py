@@ -195,6 +195,34 @@ class OpenSummariesTests(unittest.TestCase):
         os.environ.pop("TODO_ENTITY", None)
         self.assertIsNone(ANNO.open_todo_summaries())
 
+    def test_status_is_requested_explicitly(self):
+        """Omitting status returns completed items too, and nothing ever prunes.
+
+        This is not hypothetical: 1.11.0 shipped relying on the service schema's
+        `needs_action` default. Home Assistant applies field defaults when it
+        renders the UI form, not when a service is called over the API, so every
+        summary matched, every pass cleared nothing, and - because a pass that
+        finds nothing logged nothing - it looked exactly like the worker was
+        never running.
+        """
+        os.environ["TODO_ENTITY"] = ENTITY
+        self.addCleanup(os.environ.pop, "TODO_ENTITY", None)
+
+        seen = {}
+
+        def capture(service, payload, return_response=False):
+            seen["service"] = service
+            seen["payload"] = payload
+            seen["return_response"] = return_response
+            return True, open_list("one")
+
+        ANNO.todo_request = capture
+        ANNO.open_todo_summaries()
+
+        self.assertEqual(seen["service"], "get_items")
+        self.assertEqual(seen["payload"].get("status"), ["needs_action"])
+        self.assertTrue(seen["return_response"])
+
     def test_summaries_are_extracted(self):
         os.environ["TODO_ENTITY"] = ENTITY
         self.addCleanup(os.environ.pop, "TODO_ENTITY", None)
