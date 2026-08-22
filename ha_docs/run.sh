@@ -56,6 +56,14 @@ export TODO_ENTITY=""
 if bashio::config.has_value 'todo_entity'; then
     TODO_ENTITY=$(bashio::config 'todo_entity')
 fi
+# Where the two checkers record what they are doing, for annotations.py to
+# serve at /anno/scan. There is deliberately no default inside scan_status.py:
+# unset makes every writer there a no-op, so running check_anchors.py by hand
+# on a workstation cannot scatter status files across it.
+export HA_DOCS_SCAN_STATUS_DIR=/data/scan
+# Read by annotations.py so the site can say "switched off in the add-on
+# configuration" rather than "this has never run".
+export REPORT_DOC_LINK_REPAIRS WATCH_ENTITY_UPDATES
 # ghslug.py is imported by mkdocs.yml via !!python/name:
 export PYTHONPATH=/opt/ha_docs
 

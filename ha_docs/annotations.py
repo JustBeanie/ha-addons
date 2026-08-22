@@ -32,6 +32,8 @@ import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse
 
+import scan_status
+
 STORE_PATH = "/data/annotations.json"
 BIND = ("127.0.0.1", 8100)
 
@@ -360,6 +362,14 @@ class Handler(BaseHTTPRequestHandler):
                 "build": read_marker(BUILD_STAMP_PATH),
                 "refreshed": read_marker(REFRESH_MARKER_PATH),
             })
+        elif route == "/anno/scan":
+            # Deliberately not folded into /anno/health: the Supervisor watchdog
+            # probes that on a timer, and it must stay a trivial liveness answer
+            # rather than growing a directory walk.
+            self._reply(200, scan_status.read_status(
+                enabled=os.environ.get("REPORT_DOC_LINK_REPAIRS") == "true",
+                watcher=os.environ.get("WATCH_ENTITY_UPDATES") == "true",
+            ))
         else:
             self._reply(404, {"ok": False, "error": "no such route"})
 

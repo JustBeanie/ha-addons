@@ -114,10 +114,14 @@ extra_javascript:
   # Highlights and notes. Independent of the two above - it only needs the DOM
   # and the annotation service nginx proxies at /anno/.
   - assets/annotate.js
+  # Live status for both link checkers. Reads /anno/scan; mounts into
+  # annotate.js's drawer on a narrow screen, so it must load after it.
+  - assets/checker.js
 
 extra_css:
   - assets/diagrams.css
   - assets/annotate.css
+  - assets/checker.css
 
 plugins:
   - search:
