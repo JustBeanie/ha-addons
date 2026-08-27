@@ -19,7 +19,8 @@ only ever pulls.
 | `site_name` | `Docs` | Title in the header and browser tab. |
 | `git_token` | *(unset)* | Personal access token. Only needed for a private repo. HA Docs never writes it to its log, but add-on configuration and status output containing it is sensitive. |
 | `todo_entity` | *(unset)* | To-do list that notes are mirrored onto, e.g. `todo.docs_review`. Leave empty to keep notes inside the docs site. |
-| `report_doc_link_repairs` | `true` | Raise a Home Assistant Repairs issue for each invalid automation/script Docs link. Requires Spook. Never changes entity descriptions. |
+| `notify_service` | *(unset)* | Notification service alerted when a failed anchor check freezes the site, e.g. `notify.mobile_app_phone`. Leave empty to raise the Repairs issue without a push. |
+| `report_doc_link_repairs` | `true` | Raise a Home Assistant Repairs issue for each invalid automation/script Docs link, and for a source anchor check that is holding the site back. Requires Spook. Never changes entity descriptions. |
 | `repair_scan_on_start` | `true` | Start the report-only Docs-link Repair scan in the background when HA Docs starts. |
 | `repair_scan_concurrency` | `4` | Concurrent configuration reads during the scan. Range: 1–8; Repair actions remain serial. |
 | `repair_progress_interval` | `25` | Entities between visible scan-progress log records. Range: 1–100. |
@@ -262,6 +263,35 @@ open in the companion app costs nothing.
 Status lives in `/data/scan/`, alongside the annotation store. Like everything
 else the add-on keeps, it is derived state — deleting it costs nothing more than
 the next scan.
+
+## When the site stops updating
+
+A broken anchor in your Markdown fails the source check, and HA Docs then keeps
+serving the last commit that passed rather than publishing a site with links
+that go nowhere. That is deliberate — but it means the site itself cannot tell
+you, because the site is the thing that has stopped.
+
+So the failure reports outward instead:
+
+- A **Repairs issue** — *HA Docs site is frozen* — listing every broken link and
+  the file it is in. It clears itself on the next check that passes, so there is
+  nothing to acknowledge. Needs `report_doc_link_repairs` (and Spook).
+- One **push** to `notify_service`, if you have set one. Sent when a run starts
+  failing, not on every poll, so a repo left broken over a weekend is one
+  notification rather than a hundred. It re-arms once a check passes again.
+
+Neither can hold the site back: if Home Assistant is unreachable the reporting
+is skipped and logged, and the rebuild still turns purely on whether the links
+are valid.
+
+To find the problem before it reaches this add-on, run the same check in CI:
+
+```
+python check_anchors.py --source /path/to/your/docs/repo
+```
+
+Its exit code is the number of broken links, so a non-zero exit is exactly the
+condition that would stop a rebuild here.
 
 ## Forcing an immediate sync
 

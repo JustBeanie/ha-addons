@@ -56,6 +56,13 @@ export TODO_ENTITY=""
 if bashio::config.has_value 'todo_entity'; then
     TODO_ENTITY=$(bashio::config 'todo_entity')
 fi
+# Alerted when a failed source check freezes the site. Empty means the Repairs
+# issue is still raised, there is just no push -- same has_value guard as above
+# so an unset option cannot arrive as the string "null".
+NOTIFY_SERVICE=""
+if bashio::config.has_value 'notify_service'; then
+    NOTIFY_SERVICE=$(bashio::config 'notify_service')
+fi
 # Where the two checkers record what they are doing, for annotations.py to
 # serve at /anno/scan. There is deliberately no default inside scan_status.py:
 # unset makes every writer there a no-op, so running check_anchors.py by hand
@@ -215,7 +222,18 @@ refresh() {
     # Source validation is cheap and always runs.  The full HA reconciliation
     # below runs only at startup or when the source/builder changed; ordinary
     # entity updates are handled one-at-a-time by entity_watch.py.
-    if ! python3 /opt/ha_docs/check_anchors.py --source --log-level "${LOG_LEVEL}" "${REPO_DIR}"; then
+    # A failed source check is the one failure a reader cannot see from the
+    # site, because it is the site that stops updating. Report it the same way
+    # the entity scan reports: a Repairs issue that clears itself, plus one
+    # push on the way in.
+    local source_args=(--source --log-level "${LOG_LEVEL}")
+    if [ "${REPORT_DOC_LINK_REPAIRS}" = "true" ]; then
+        source_args+=(--report)
+        if [ -n "${NOTIFY_SERVICE}" ]; then
+            source_args+=(--notify-service "${NOTIFY_SERVICE}")
+        fi
+    fi
+    if ! python3 /opt/ha_docs/check_anchors.py "${source_args[@]}" "${REPO_DIR}"; then
         log_error "Source anchor check failed; continuing to serve the current site"
         return 1
     fi

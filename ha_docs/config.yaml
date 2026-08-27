@@ -1,7 +1,7 @@
 name: "HA Docs"
 slug: "ha_docs"
 description: "Serves a git repo of Markdown as a searchable MkDocs site behind HA ingress."
-version: "1.11.1"
+version: "1.12.0"
 url: "https://github.com/JustBeanie/ha-addons"
 
 arch:
@@ -37,6 +37,7 @@ options:
   poll_interval: 900
   site_name: "Docs"
   todo_entity: ""
+  notify_service: ""
   report_doc_link_repairs: true
   repair_scan_on_start: true
   repair_scan_concurrency: 4
@@ -56,8 +57,13 @@ schema:
   # Where notes are mirrored, e.g. todo.docs_review. Unset = highlights and
   # notes still work, they just stay inside the docs site.
   todo_entity: "str?"
+  # Notified when a failed anchor check freezes the site, e.g.
+  # notify.mobile_app_phone. Unset = the Repairs issue is still raised, there is
+  # just no push. Sent once per failure, not once per poll.
+  notify_service: "str?"
   # Requires the Spook integration. Raise a Repairs issue for every docs-link
-  # candidate; descriptions are never changed automatically.
+  # candidate, and for a source anchor check that is holding the site back;
+  # descriptions are never changed automatically.
   report_doc_link_repairs: "bool"
   # Run the report-only Docs-link Repair scan in the background at app start.
   repair_scan_on_start: "bool"

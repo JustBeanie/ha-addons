@@ -86,6 +86,15 @@ INDEX_ROW_RE = re.compile(
     re.MULTILINE,
 )
 
+# One issue for one condition -- "the site is frozen" -- rather than one per
+# link, because the reader can only act on all of them at once anyway.
+SOURCE_REPAIR_ISSUE_ID = "ha_docs_source_anchors"
+# The check runs on every poll, so the push has to be edge-triggered or it is
+# ~96 identical notifications a day.  A marker file rather than in-memory state
+# because each run is a short-lived subprocess.  Overridable so that a run
+# outside the add-on cannot touch /data.
+SOURCE_ALERT_MARKER = pathlib.Path(os.getenv("HA_DOCS_SOURCE_ALERT_MARKER", "/data/.source_alerted"))
+
 
 def heading_text(raw: str) -> str:
     """Reduce a raw heading to the plain text the toc extension slugifies."""
@@ -142,7 +151,75 @@ def collect_links(repo: pathlib.Path):
             yield path.relative_to(repo), rel, anchor, target
 
 
-def check_source(repo: pathlib.Path) -> int:
+def source_repair_description(broken: list[dict[str, str]]) -> str:
+    """Human-facing remediation text for the gated-rebuild Repairs issue."""
+    lines = [
+        "The docs site is **frozen**. Its source anchor check failed, so the add-on is",
+        "still serving the last commit that passed, and will keep doing so until these",
+        "links are fixed:",
+        "",
+    ]
+    lines += [f"- `{item['source']}` -> `{item['target']}` ({item['problem']})" for item in broken]
+    lines += [
+        "",
+        "Fix the link -- or add the heading it expects -- in the docs repository and",
+        "push. The next poll rebuilds the site and clears this issue by itself.",
+    ]
+    return "\n".join(lines)
+
+
+def announce_source_result(api, notify_service: str | None, bad: int, broken: list[dict[str, str]]) -> None:
+    """Report a gated rebuild through Repairs, and push once on the way in.
+
+    Best-effort throughout, and deliberately returns nothing: the caller's exit
+    code is what gates the rebuild, so a Repairs or notify outage must never be
+    able to publish unvalidated docs -- nor to hold back a clean one.
+    """
+    try:
+        if bad:
+            api.call_service("repairs", "create", {
+                "issue_id": SOURCE_REPAIR_ISSUE_ID,
+                "title": f"HA Docs site is frozen: {bad} broken anchor(s)",
+                "description": source_repair_description(broken),
+                "severity": "warning",
+                "persistent": True,
+            })
+            LOGGER.warning("[source] Repair raised: broken=%d location=Settings > System > Repairs", bad)
+        else:
+            try:
+                api.call_service("repairs", "remove", {"issue_id": SOURCE_REPAIR_ISSUE_ID})
+            except (RuntimeError, OSError):
+                # No pre-existing issue is the normal case; same best-effort
+                # rule as the per-entity removals in check_ha.
+                pass
+    # OSError as well as RuntimeError: CoreApiError only covers an HTTP status.
+    # A refused connection surfaces as urllib.error.URLError, and letting that
+    # escape would make an HA blip look like a failed check and freeze the site.
+    except (RuntimeError, OSError) as exc:
+        LOGGER.error("[source] Repair report failed: error=%s", exc)
+
+    try:
+        if not bad:
+            SOURCE_ALERT_MARKER.unlink(missing_ok=True)
+        elif notify_service and not SOURCE_ALERT_MARKER.exists():
+            domain, _, service = notify_service.partition(".")
+            if not service:
+                domain, service = "notify", notify_service
+            api.call_service(domain, service, {
+                "title": "Docs site frozen",
+                "message": (f"{bad} broken anchor(s) failed the check. HA Docs is still serving "
+                            "the previous commit. See Settings > System > Repairs."),
+            })
+            # Stamped only once the push actually landed, so a wrong service
+            # name retries next poll instead of swallowing the one alert.
+            SOURCE_ALERT_MARKER.parent.mkdir(parents=True, exist_ok=True)
+            SOURCE_ALERT_MARKER.touch()
+            LOGGER.warning("[source] Failure notification sent: service=%s", notify_service)
+    except (RuntimeError, OSError) as exc:
+        LOGGER.error("[source] Failure notification failed: error=%s", exc)
+
+
+def check_source(repo: pathlib.Path, api=None, notify_service: str | None = None) -> int:
     headings = collect_headings(repo)
     total = bad = 0
     # Collected as well as logged, because a non-zero result here stops the
@@ -162,6 +239,11 @@ def check_source(repo: pathlib.Path) -> int:
             broken.append({"source": src.as_posix(), "target": raw, "problem": "broken anchor"})
     LOGGER.info("[source] anchor check complete: checked=%d broken=%d", total, bad)
     scan_status.write_source(total, bad, broken)
+    # No api means no reporting surface -- a --source run on a workstation stays
+    # silent, the same way an unset HA_DOCS_SCAN_STATUS_DIR makes the status
+    # writers no-ops.
+    if api is not None:
+        announce_source_result(api, notify_service, bad, broken)
     return bad
 
 
@@ -591,6 +673,9 @@ def main() -> int:
     ap.add_argument("--entity-id", action="append", dest="entity_ids", metavar="ENTITY_ID",
                     help="check only this automation or script; repeatable")
     ap.add_argument("--github-base", help="repository blob URL prefix, e.g. https://github.com/o/r/blob/main")
+    ap.add_argument("--notify-service", default=os.getenv("HA_DOCS_NOTIFY_SERVICE"),
+                    help="notify service alerted when a failed source check freezes the site, "
+                         "e.g. notify.mobile_app_phone; unset raises the Repair only")
     ap.add_argument("--ha-api", default=os.getenv("HA_API_URL", "http://supervisor/core/api"))
     ap.add_argument("--audit-file", type=pathlib.Path, default=pathlib.Path(os.getenv("HA_DOC_LINK_AUDIT", "/data/doc-link-repairs.jsonl")))
     ap.add_argument("repo", type=pathlib.Path)
@@ -610,7 +695,14 @@ def main() -> int:
             ap.error("--ha requires SUPERVISOR_TOKEN")
         return check_ha(args.repo, CoreApi(args.ha_api, token), args.github_base, args.report, args.audit_file,
                         args.scan_concurrency, args.progress_interval, args.heartbeat_interval, args.entity_ids)
-    return check_source(args.repo)
+    api = None
+    if args.report:
+        token = os.getenv("SUPERVISOR_TOKEN")
+        if token:
+            api = CoreApi(args.ha_api, token)
+        else:
+            LOGGER.warning("[source] --report ignored: SUPERVISOR_TOKEN is not set")
+    return check_source(args.repo, api, args.notify_service)
 
 
 if __name__ == "__main__":

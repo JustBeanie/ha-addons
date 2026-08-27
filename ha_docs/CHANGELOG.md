@@ -1,5 +1,29 @@
 # Changelog
 
+## 1.12.0 - 2026-08-27
+
+A failed source anchor check now says so, instead of only stopping.
+
+- **A frozen site raises a Repairs issue.** The source anchor check gates the
+  rebuild, so one broken link leaves the site serving an older commit for as
+  long as it takes someone to notice. Until now the only evidence was a line in
+  this add-on's log and a badge in the header of the very site that had stopped
+  updating — which is precisely the wrong place for it. It is reported outward
+  now: one issue, *HA Docs site is frozen*, listing every broken link, removed
+  automatically by the next check that passes.
+- **New `notify_service` option** sends a push on the same condition. It fires
+  on the transition into failure rather than on every poll — the check runs
+  every `poll_interval`, so the level-triggered version would be about a hundred
+  identical notifications a day and would be muted within a week. It re-arms
+  after a check passes. Unset means the Repairs issue is still raised.
+- **Reporting can never change what gets published.** Both paths are
+  best-effort and swallow connection errors as well as HTTP ones: an
+  unreachable Home Assistant must not be able to publish unvalidated docs, nor
+  to hold back a good build. The rebuild still turns purely on the link count.
+- `--source` accepts `--report` and `--notify-service` to match. Without a
+  `SUPERVISOR_TOKEN` both are ignored with a warning, so running the checker by
+  hand on a workstation — or in CI — behaves exactly as it did before.
+
 ## 1.11.1 - 2026-08-22
 
 Fixes the reconcile pass shipped in 1.11.0, which never cleared anything.
