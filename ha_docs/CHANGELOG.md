@@ -1,5 +1,33 @@
 # Changelog
 
+## 1.13.0 - 2026-08-28
+
+Table columns sort when you click their header.
+
+- **Any table with five or more rows sorts now.** Click a header to sort by it,
+  again to reverse, a third time to put it back in the order it was written in
+  — which these tables genuinely have, being ordered by hand. Below five rows
+  nothing is added: the table is already visible at a glance, and that threshold
+  is the difference between the affordance appearing on about two hundred
+  tables and on all four hundred and eighty-six.
+- **Column types are read from the cells, not from the Markdown.** Sorting a
+  column as numbers rather than as text is a decision the usual libraries take
+  from a `data-sort-method` attribute on each header — which would mean writing
+  site scaffolding into the docs repo, the one thing this add-on exists to
+  avoid. Sniffing the column instead keeps the source rendering identically on
+  GitHub. Thousands separators and trailing units are understood, so `87,493`
+  no longer sorts below `9,102`; ISO dates need nothing, already sorting
+  correctly as text.
+- **Nothing new is downloaded.** Material's documented integration pulls a
+  library from a CDN and wants a further file per data type, one of them a date
+  parser whose only possible effect here would be to misread dates that are
+  already correct. The sort is written into the add-on instead: no CDN, no new
+  pin, no change to the Dockerfile.
+- **Existing highlights are unaffected by sorting** — they live inside the row
+  and travel with it. The one case that is not exact is a highlight *created*
+  while a table is sorted; see DOCS.md. No stored annotation can be rewritten
+  or orphaned by any of this.
+
 ## 1.12.0 - 2026-08-27
 
 A failed source anchor check now says so, instead of only stopping.

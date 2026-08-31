@@ -121,6 +121,35 @@ Because `mkdocs build` cannot validate diagram syntax, a block that fails to
 parse is rendered as a visible error with its source, rather than as an empty
 gap.
 
+### Sortable tables
+
+Click a column header to sort by it. A second click reverses, and a third puts
+the table back in the order it was written in — worth having, because these
+tables are ordered by hand: the plans index runs in plan-number order and the
+inventories are grouped by domain, and that arrangement is information too.
+Headers are focusable, so Enter and Space do the same thing.
+
+Only tables with **five or more rows** get it. Below that the whole table is
+already visible at a glance, so a clickable header would be decoration on about
+three hundred of the four hundred-odd tables in the docs set.
+
+Columns are typed from their own contents rather than from anything written in
+the Markdown, which is what keeps the source repo free of site scaffolding. A
+column is sorted as numbers when every filled cell is one — thousands
+separators and a trailing unit included, so `87,493` sorts above `9,102` rather
+than below it — and as text otherwise. ISO dates need no special handling: they
+already sort correctly as text, which is the only date format these docs use.
+Empty cells sort to the bottom in both directions, on the grounds that a blank
+is missing data and not a minimum.
+
+Sorting reads the *rendered* text of a cell, so a `code span` sorts by the
+identifier and a [link](#) by its label, not by its URL or its backticks.
+
+Nothing is fetched to do any of this. Material documents a sortable-table
+integration, but it loads a library from a CDN and needs a separate file per
+data type, so the sort is written into the add-on instead — about a hundred and
+forty lines, no new download, no new version to keep pinned.
+
 ### GitHub-identical heading anchors
 
 This is the part that matters if your docs cross-link to headings.
@@ -219,6 +248,16 @@ to click.
 Text inside Mermaid diagrams cannot be annotated: that subtree is replaced with
 a fresh SVG on every render and on every palette toggle, so no anchor in it
 would survive.
+
+Sorting a table moves its rows, and highlights already on the page move with
+them — they are part of the row, not positions measured against it. Creating a
+*new* highlight inside a table you have sorted is the one case that is not
+exact: its surrounding context gets recorded in the sorted order, which is not
+the order the page loads in next time. Highlighted text that appears only once
+on the page — an entity ID, a name, a sentence — still lands correctly. A short
+value repeated down a column, such as `Approved`, can come back attached to
+another row carrying the same word. Clicking back to the original order before
+highlighting avoids it, and nothing stored is ever damaged either way.
 
 ## Checker status in the site header
 

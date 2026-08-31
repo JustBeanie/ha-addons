@@ -1,0 +1,97 @@
+/*
+ * Sort affordance for the tables tables.js has enabled.
+ *
+ * Everything hangs off `aria-sort`, which tables.js sets on every eligible
+ * header and keeps current. That is not a shortcut around adding a class - it
+ * is the only safe hook. Material styles ordinary markdown tables through
+ * `.md-typeset table:not([class])`, so putting any class on the table would
+ * silently drop its borders, padding and header shading; and the attribute has
+ * to be written for screen readers regardless, so styling from it keeps the
+ * two in step by construction.
+ *
+ * No palette handling here, unlike mermaid-init.js. Mermaid bakes colours into
+ * the SVG and has to re-render on a scheme change; these carets are drawn with
+ * `currentColor` through a mask, so both schemes are already correct and the
+ * toggle needs no hook.
+ */
+
+.md-typeset th[aria-sort] {
+  cursor: pointer;
+  /* A double click lands on the second sort, and without this it also selects
+     the header text - which then fights annotate.js's selection toolbar. */
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* Inline rather than absolutely positioned, so the caret sits after the label
+   in both directions and the two right-aligned tables in the docs set
+   (descriptions-before-008.md, trim-yaml-descriptions.md) keep their
+   alignment. The width is fixed and always reserved, so a column does not
+   change width as its state cycles. */
+.md-typeset th[aria-sort]::after {
+  content: "";
+  display: inline-block;
+  width: 0.85em;
+  height: 0.85em;
+  margin-left: 0.35em;
+  vertical-align: -0.1em;
+  /* currentColor through a mask is what makes this work in both schemes with
+     no second rule: an inline SVG used as a background-image cannot inherit
+     the text colour, but a masked block can. */
+  background-color: currentColor;
+  mask-repeat: no-repeat;
+  mask-position: center;
+  mask-size: contain;
+  -webkit-mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  -webkit-mask-size: contain;
+  /* Faint until the column is the one being sorted: present enough to read as
+     "this header does something", quiet enough that a wide roster does not
+     turn into a row of arrows competing with the headings. */
+  opacity: 0.35;
+  transition: opacity 125ms;
+}
+
+/* Neutral: both directions available. */
+.md-typeset th[aria-sort="none"]::after {
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M7 10.5l5-5 5 5z M7 13.5l5 5 5-5z'/%3E%3C/svg%3E");
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M7 10.5l5-5 5 5z M7 13.5l5 5 5-5z'/%3E%3C/svg%3E");
+}
+
+.md-typeset th[aria-sort="ascending"]::after {
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M7 14.5l5-6 5 6z'/%3E%3C/svg%3E");
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M7 14.5l5-6 5 6z'/%3E%3C/svg%3E");
+}
+
+.md-typeset th[aria-sort="descending"]::after {
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M7 9.5l5 6 5-6z'/%3E%3C/svg%3E");
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M7 9.5l5 6 5-6z'/%3E%3C/svg%3E");
+}
+
+.md-typeset th[aria-sort]:hover::after,
+.md-typeset th[aria-sort="ascending"]::after,
+.md-typeset th[aria-sort="descending"]::after {
+  opacity: 1;
+}
+
+/* :focus-visible rather than :focus, so a click does not leave a ring behind
+   on a header the reader is only pointing at. */
+.md-typeset th[aria-sort]:focus-visible {
+  outline: 2px solid var(--md-accent-fg-color, currentColor);
+  outline-offset: -2px;
+}
+
+/* Ingress puts this in a narrow iframe where hover does not exist, so the
+   neutral caret is the only cue a header is interactive. Bring it up to the
+   weight it would otherwise only reach on hover. */
+@media (hover: none) {
+  .md-typeset th[aria-sort]::after {
+    opacity: 0.6;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .md-typeset th[aria-sort]::after {
+    transition: none;
+  }
+}
