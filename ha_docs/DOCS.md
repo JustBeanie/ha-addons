@@ -56,8 +56,10 @@ scoped to **only** the docs repository, with **Repository permissions → Conten
 Read-only**. Paste it into `git_token`. Nothing else is needed — the add-on only
 ever reads.
 
-HA Docs uses the token to build the clone URL in memory. It logs only **Using
-authenticated access**, and never the token or the authenticated clone URL.
+HA Docs applies the token as a temporary Git authorization header. The
+persistent repository remote remains the unauthenticated repository URL, so a
+token is not stored in `/data/repo/.git/config`. It logs only **Using
+authenticated access**, and never the token or the authorization header.
 
 The token is still stored in Supervisor options, and Home Assistant deliberately
 lets authorized manager/admin callers read full add-on options back — including

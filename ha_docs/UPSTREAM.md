@@ -31,14 +31,15 @@ presented as a drop-in replacement for MkDocs 1.x.
 
 ## Why this add-on is not affected today
 
-The build is pinned twice over.
+The Python toolchain is pinned explicitly.
 
-`Dockerfile` pins `MKDOCS_VERSION=1.6.1` and `MATERIAL_VERSION=9.7.7`
-explicitly. Independently of that, mkdocs-material 9.7.7 declares
+`requirements.txt` pins MkDocs 1.6.1, Material 9.7.7, and pymdown-extensions
+11.0.1. Independently of that, mkdocs-material 9.7.7 declares
 `mkdocs<2,>=1.6` in its own metadata, so pip refuses MkDocs 2.0 even if the
 explicit pin were dropped.
 
-There is no CI bumping either version, and no Dependabot. A MkDocs 2.0 release
+Dependabot proposes updates to the Python dependencies and GitHub Actions, while
+the weekly HA Docs workflow exercises a clean build. A MkDocs 2.0 release still
 changes nothing about a pinned 1.6.1 build.
 
 ## What this add-on would lose if it ever did move
@@ -66,17 +67,14 @@ function silently breaks about eighty-five anchors at once.
 Ranked by how likely they are to arrive **without anyone choosing them**:
 
 1. **PyPI availability at install time.** There is no `image:` key in
-   `config.yaml` — deliberately, so there is no ghcr publishing or CI to keep
-   alive — which means the Supervisor builds this image locally on *every*
-   install. A fresh install on a new box needs mkdocs 1.6.1, mkdocs-material
+   `config.yaml` — deliberately, so the Supervisor builds this image locally
+   on every install. A fresh install on a new box needs mkdocs 1.6.1, mkdocs-material
    9.7.7 and pymdown-extensions 11.0.1 all still served by PyPI. This is the
    one that turns a working add-on into an uninstallable one.
-2. **The Alpine base ageing out.** `build.yaml` pins
-   `ghcr.io/home-assistant/{amd64,aarch64}-base:3.19`, which is Alpine 3.19 and
-   Python 3.11. Python cannot drift under the pins without someone editing that
-   file — but Alpine 3.19 dates from December 2023, and when that base stops
-   being rebuilt, moving to a newer one is what finally puts a newer Python
-   underneath pinned packages that were never tested against it.
+2. **The Alpine base ageing out.** `build.yaml` pins the architecture-specific
+   images to Home Assistant's `3.24-2026.08.0` base release. Python and Alpine
+   cannot drift under that pin without someone editing the file, but the pin
+   still needs to be refreshed as Home Assistant publishes newer base images.
 3. **Unpatched upstream fixes.** Lowest of the three. This serves a LAN-only
    box behind authenticated ingress, building Markdown from a repository the
    operator controls. No untrusted input reaches mkdocs.
@@ -107,8 +105,8 @@ Not yet. Three questions decide it for this add-on, and only one is a clear yes.
   as a config key, but that is not documented, and the entity-ID search added
   in 1.9.0 depends on it.
 
-Zensical also requires Python ≥3.10, which Alpine 3.19's 3.11 satisfies, so the
-base image is not the obstacle.
+Zensical also requires Python ≥3.10, which the current Home Assistant base
+satisfies, so the base image is not the obstacle.
 
 ## The position
 
@@ -119,11 +117,11 @@ for moving right now is zero.
 
 Two cheap hardening steps belong with that:
 
-- Pin `build_from` to image **digests** rather than the mutable `:3.19` tag, so
-  a rebuild is reproducible rather than merely likely to be.
-- Run a from-scratch rebuild occasionally. It is the single canary for both
-  risk 1 and risk 2, and it is the only way either of them announces itself
-  before an install fails.
+- Keep `build_from` on an explicit Home Assistant base release rather than a
+  mutable `latest` tag, so a rebuild is reproducible rather than merely likely.
+- Run a from-scratch rebuild weekly. The scheduled HA Docs workflow is the
+  canary for both risk 1 and risk 2, and is the only way either of them
+  announces itself before an install fails.
 
 Revisit when Zensical reaches its module/plugin phase, or when the Alpine base
 forces a move — whichever lands first. If both slugify and search turn out to

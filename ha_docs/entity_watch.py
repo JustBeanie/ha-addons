@@ -27,10 +27,10 @@ logging.addLevelName(TRACE, "TRACE")
 RUNTIME_ATTRIBUTES = {
     "current", "last_action", "last_action_time", "last_reported", "last_triggered",
 }
-# What a configuration save actually looks like from here.  Home Assistant does
+# What a configuration save actually looks like from here. Home Assistant does
 # not remove the entity's state: the registry entry outlives the platform
 # entity, so the reload writes ``unavailable`` and then writes the rebuilt
-# entity back a couple of milliseconds later.  Both halves are ordinary state
+# entity back a couple of milliseconds later. Both halves are ordinary state
 # flips, which is exactly what execution activity looks like, so the transition
 # has to be recognised by the value rather than by the shape of the event.
 RELOAD_STATES = {"unavailable", "unknown"}
@@ -61,14 +61,14 @@ def is_runtime_state_change(event_data: dict) -> bool:
     pointless.  Ignore the same operational state flips for automations.
 
     Saving an automation or a script is the one case that must get through, and
-    it does not arrive looking like an edit.  Home Assistant reloads only the
+    it does not arrive looking like an edit. Home Assistant reloads only the
     entity whose configuration changed, and because its registry entry outlives
     the platform entity that reload is published as ``off`` -> ``unavailable``
-    -> ``off`` within about two milliseconds.  A description lives in the
+    -> ``off`` within about two milliseconds. A description lives in the
     configuration and never in the attributes, so that round trip is the only
     evidence of an edit there is -- and read as two state flips it is
     indistinguishable from a script running, which is how every edit came to be
-    discarded.  A deletion, which does take the registry entry with it, arrives
+    discarded. A deletion, which does take the registry entry with it, arrives
     as the same first half followed by a genuinely absent state.
     """
     entity_id = event_data.get("entity_id", "")
@@ -79,13 +79,13 @@ def is_runtime_state_change(event_data: dict) -> bool:
     new_state = event_data.get("new_state")
     if old_state is None or new_state is None:
         # The entity was added or removed outright: a configuration event either
-        # way.  Only an entity with no registry entry leaves this way, but the
+        # way. Only an entity with no registry entry leaves this way, but the
         # add half of a restart does arrive here.
         return False
     old_value = old_state.get("state")
     new_value = new_state.get("state")
     if old_value in RELOAD_STATES or new_value in RELOAD_STATES:
-        # Either half of a reload round trip.  Checking twice for one save is
+        # Either half of a reload round trip. Checking twice for one save is
         # the point of the debounce, and costs one batched check.
         return False
     if old_value != new_value:

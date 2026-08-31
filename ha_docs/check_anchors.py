@@ -327,7 +327,14 @@ def url_target(url: str, github_base: str) -> tuple[pathlib.Path, str] | None:
     file_part, sep, anchor = relative.partition("#")
     if not sep or not file_part or not anchor:
         return None
-    return pathlib.Path(file_part), anchor
+    # GitHub URLs use POSIX separators even when the scanner is tested on
+    # Windows. Reject absolute paths and traversal before converting to the
+    # host platform's Path type; a documentation link must never escape the
+    # configured repository root.
+    posix_path = pathlib.PurePosixPath(file_part)
+    if posix_path.is_absolute() or ".." in posix_path.parts:
+        return None
+    return pathlib.Path(*posix_path.parts), anchor
 
 
 def valid_doc_url(url: str, repo: pathlib.Path, github_base: str, headings: dict) -> bool:
@@ -376,10 +383,15 @@ class CoreApi:
         try:
             with urllib.request.urlopen(request, timeout=30) as response:
                 LOGGER.log(TRACE, "[ha] API response: method=%s path=%s status=%s", method, path, response.status)
-                return json.loads(response.read().decode("utf-8"))
+                raw = response.read().decode("utf-8")
+                return json.loads(raw) if raw else None
         except urllib.error.HTTPError as exc:
             detail = exc.read().decode("utf-8", errors="replace")
             raise CoreApiError(method, path, exc.code, detail) from exc
+        except (urllib.error.URLError, OSError) as exc:
+            raise CoreApiError(method, path, 0, str(exc)) from exc
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise CoreApiError(method, path, 0, f"invalid JSON response: {exc}") from exc
 
     def remember_config_identifier(self, state: dict) -> str | None:
         """Record the API config key for one live automation or script state."""
@@ -389,7 +401,8 @@ class CoreApi:
         if entity_id.startswith("automation."):
             # Automation editor URLs use the immutable config ``id`` rather
             # than the registry object_id. Scripts use their storage key.
-            config_id = state.get("attributes", {}).get("id")
+            attributes = state.get("attributes")
+            config_id = attributes.get("id") if isinstance(attributes, dict) else None
             if not config_id:
                 raise RuntimeError(f"automation {entity_id} has no configuration id")
             self.config_identifiers[entity_id] = str(config_id)
@@ -399,8 +412,12 @@ class CoreApi:
 
     def entity_ids(self) -> list[str]:
         states = self.request("GET", "states")
+        if not isinstance(states, list):
+            raise CoreApiError("GET", "states", 0, "invalid JSON response shape")
         entity_ids = []
         for state in states:
+            if not isinstance(state, dict):
+                continue
             entity_id = self.remember_config_identifier(state)
             if entity_id:
                 entity_ids.append(entity_id)
@@ -408,20 +425,42 @@ class CoreApi:
 
     def prepare_entity(self, entity_id: str) -> bool:
         """Load one entity's state so a targeted check has its config key."""
-        state = self.request("GET", f"states/{entity_id}")
+        state = self.request("GET", f"states/{urllib.parse.quote(entity_id, safe='')}")
+        if not isinstance(state, dict):
+            return False
         return self.remember_config_identifier(state) == entity_id
 
     def get_config(self, entity_id: str) -> dict:
         domain, object_id = entity_id.split(".", 1)
         config_id = self.config_identifiers.get(entity_id, object_id)
-        payload = self.request("GET", f"config/{domain}/config/{config_id}")
+        payload = self.request(
+            "GET",
+            "config/{}/config/{}".format(
+                urllib.parse.quote(domain, safe=""),
+                urllib.parse.quote(str(config_id), safe=""),
+            ),
+        )
         # The endpoint may return either config directly or its normal envelope.
-        return payload.get("config", payload)
+        if not isinstance(payload, dict):
+            raise CoreApiError("GET", f"config/{domain}/config/{config_id}", 0,
+                               "invalid JSON response shape")
+        config = payload.get("config", payload)
+        if not isinstance(config, dict):
+            raise CoreApiError("GET", f"config/{domain}/config/{config_id}", 0,
+                               "invalid config response shape")
+        return config
 
     def set_config(self, entity_id: str, config: dict) -> None:
         domain, object_id = entity_id.split(".", 1)
         config_id = self.config_identifiers.get(entity_id, object_id)
-        self.request("POST", f"config/{domain}/config/{config_id}", config)
+        self.request(
+            "POST",
+            "config/{}/config/{}".format(
+                urllib.parse.quote(domain, safe=""),
+                urllib.parse.quote(str(config_id), safe=""),
+            ),
+            config,
+        )
 
     def call_service(self, domain: str, service: str, data: dict) -> None:
         self.request("POST", f"services/{domain}/{service}", data)

@@ -103,17 +103,31 @@ BUILDER_ID=$(find /opt/ha_docs -type f -print0 \
     | xargs -0 md5sum | sort -k 2 | md5sum | cut -d' ' -f1)
 readonly BUILDER_ID
 
-# Build the URL git actually uses. Kept in a separate variable that is never
-# logged, so a token cannot leak into the add-on log.
-AUTH_REPO="${REPO}"
+# Keep authentication out of the repository URL. Git stores the remote URL in
+# /data/repo/.git/config, and embedding a personal access token there would
+# leave a long-lived secret in the add-on's persistent data. The temporary
+# config environment below applies the header only to the Git process that
+# needs it.
+GIT_TOKEN=""
 if bashio::config.has_value 'git_token'; then
-    AUTH_REPO="${REPO/https:\/\//https://$(bashio::config 'git_token')@}"
+    GIT_TOKEN=$(bashio::config 'git_token')
     log_info "Using authenticated access for the docs repository"
 fi
 
+git_with_auth() {
+    if [ -n "${GIT_TOKEN}" ]; then
+        GIT_CONFIG_COUNT=1 \
+        GIT_CONFIG_KEY_0=http.extraHeader \
+        GIT_CONFIG_VALUE_0="Authorization: Bearer ${GIT_TOKEN}" \
+        git "$@"
+    else
+        git "$@"
+    fi
+}
+
 # The GitHub blob base for the configured repo, or a non-zero return when it is
-# not a GitHub URL. Always derived from REPO, never AUTH_REPO, so a configured
-# git_token cannot reach an entity description, an audit record, or a page.
+# not a GitHub URL. It is derived from REPO only, so a configured git_token
+# cannot reach an entity description, an audit record, or a page.
 github_blob_base() {
     case "${REPO}" in
         https://github.com/*.git) echo "${REPO%.git}/blob/${BRANCH}" ;;
@@ -123,7 +137,8 @@ github_blob_base() {
 }
 
 # Read by mkdocs.yml via !ENV to put per-page "edit" and "view source" links on
-# the site. Same token-safety rule as above: built from REPO, never AUTH_REPO.
+# the site. Same token-safety rule as above: built from REPO, never from the
+# authenticated Git value.
 # Left empty for a non-GitHub repo, which switches the two actions off rather
 # than pointing them somewhere wrong.
 export REPO_URL=""
@@ -137,13 +152,14 @@ esac
 
 sync_repo() {
     if [ -d "${REPO_DIR}/.git" ]; then
-        git -C "${REPO_DIR}" remote set-url origin "${AUTH_REPO}"
-        git -C "${REPO_DIR}" fetch --depth 1 --quiet origin "${BRANCH}" || return 1
+        # Normalize a remote left by an older release that embedded the token.
+        git -C "${REPO_DIR}" remote set-url origin "${REPO}"
+        git_with_auth -C "${REPO_DIR}" fetch --depth 1 --quiet origin "${BRANCH}" || return 1
         git -C "${REPO_DIR}" reset --hard --quiet "origin/${BRANCH}" || return 1
     else
         rm -rf "${REPO_DIR}"
-        git clone --depth 1 --quiet --branch "${BRANCH}" \
-            "${AUTH_REPO}" "${REPO_DIR}" || return 1
+        git_with_auth clone --depth 1 --quiet --branch "${BRANCH}" \
+            "${REPO}" "${REPO_DIR}" || return 1
     fi
 }
 
@@ -169,8 +185,8 @@ reconcile_ha_docs_links() {
     fi
 
     # Only GitHub blob links are accepted in entity descriptions. Keep REPO
-    # (rather than AUTH_REPO) here so a configured git token cannot enter a
-    # description or an audit record.
+    # (rather than an authenticated Git value) here so a configured git token
+    # cannot enter a description or an audit record.
     local base
     if ! base=$(github_blob_base); then
         log_warning "HA Docs-link Repair scan requires a GitHub repository URL"

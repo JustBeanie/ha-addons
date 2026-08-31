@@ -36,12 +36,19 @@ TIMEOUT = 30
 
 def link_issue_ids(payload, prefix):
     """Bare ids of the open issues under ``prefix``, from a list_issues result."""
-    issues = (payload or {}).get("result", {}).get("issues", [])
+    if not isinstance(payload, dict):
+        return set()
+    result = payload.get("result")
+    if not isinstance(result, dict):
+        return set()
+    issues = result.get("issues", [])
     found = set()
     for issue in issues if isinstance(issues, list) else []:
         if not isinstance(issue, dict):
             continue
         issue_id = issue.get("issue_id") or ""
+        if not isinstance(issue_id, str):
+            continue
         if issue_id.startswith(USER_PREFIX):
             issue_id = issue_id[len(USER_PREFIX):]
         if issue_id.startswith(prefix):

@@ -1,0 +1,15 @@
+---
+# These rules are intentionally relaxed for Home Assistant app images. Alpine
+# packages are resolved from the pinned Home Assistant base image, and the CI
+# build supplies the architecture/version labels at build time.
+ignored:
+  - DL3003
+  - DL3006
+  - DL3007
+  - DL3008
+  - DL3013
+  - DL3018
+  - DL3042
+  - DL4006
+  - SC2046
+  - SC2086

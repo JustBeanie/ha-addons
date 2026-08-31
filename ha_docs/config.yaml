@@ -1,7 +1,7 @@
 name: "HA Docs"
 slug: "ha_docs"
 description: "Serves a git repo of Markdown as a searchable MkDocs site behind HA ingress."
-version: "1.14.1"
+version: "1.15.0"
 url: "https://github.com/JustBeanie/ha-addons"
 
 arch:
@@ -14,9 +14,13 @@ arch:
 init: false
 startup: application
 boot: auto
+stage: stable
+backup: cold
+apparmor: true
 
 ingress: true
 ingress_port: 8099
+panel_admin: true
 
 # An application-level probe rather than just "is the container still up".
 # /anno/health is served by annotations.py and proxied by nginx, so a failure

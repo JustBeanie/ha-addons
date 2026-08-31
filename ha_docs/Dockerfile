@@ -1,13 +1,24 @@
 ARG BUILD_FROM
 FROM ${BUILD_FROM}
 
+ARG BUILD_ARCH
+ARG BUILD_VERSION
+LABEL \
+    io.hass.type="app" \
+    io.hass.arch="${BUILD_ARCH}" \
+    io.hass.version="${BUILD_VERSION}"
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1
+
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
-# Versions pinned so a rebuild months from now produces the same site.
-ARG MKDOCS_VERSION=1.6.1
-ARG MATERIAL_VERSION=9.7.7
-ARG PYMDOWN_VERSION=11.0.1
+# Direct Python dependencies are pinned in requirements.txt so Dependabot can
+# propose updates and CI can build the same direct versions on every
+# architecture.
 ARG MERMAID_VERSION=11.16.0
+
+COPY requirements.txt /tmp/ha-docs-requirements.txt
 
 RUN apk add --no-cache \
         git \
@@ -20,11 +31,10 @@ RUN apk add --no-cache \
         python3-dev \
         libffi-dev \
     && pip install --no-cache-dir --break-system-packages \
-        "mkdocs==${MKDOCS_VERSION}" \
-        "mkdocs-material==${MATERIAL_VERSION}" \
-        "pymdown-extensions==${PYMDOWN_VERSION}" \
+        -r /tmp/ha-docs-requirements.txt \
+    && pip check \
     && apk del .build-deps \
-    && rm -rf /root/.cache
+    && rm -rf /root/.cache /tmp/ha-docs-requirements.txt
 
 # Mermaid is vendored into the image, not loaded at page load. Material's own
 # diagram support pulls the runtime from a CDN, which a LAN-only box cannot
@@ -45,6 +55,7 @@ COPY check_anchors.py entity_watch.py repairs_registry.py scan_status.py /opt/ha
 COPY overrides/ /opt/ha_docs/overrides/
 COPY nginx.conf /etc/nginx/nginx.conf
 COPY run.sh /run.sh
-RUN chmod a+x /run.sh
+RUN nginx -t \
+    && chmod a+x /run.sh
 
 CMD [ "/run.sh" ]

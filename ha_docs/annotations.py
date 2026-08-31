@@ -113,6 +113,17 @@ class Store:
         try:
             with open(self._path, "r", encoding="utf-8") as handle:
                 data = json.load(handle)
+            if not isinstance(data, dict):
+                raise ValueError("store root must be an object")
+            records = data.get("annotations")
+            if not isinstance(records, dict):
+                raise ValueError("annotations must be an object")
+            if not all(
+                isinstance(record_id, str) and isinstance(record, dict)
+                for record_id, record in records.items()
+            ):
+                raise ValueError("annotations contain an invalid record")
+            return records
         except FileNotFoundError:
             return {}
         except (ValueError, OSError) as err:
@@ -124,11 +135,6 @@ class Store:
             except OSError:
                 pass
             return {}
-
-        records = data.get("annotations")
-        if not isinstance(records, dict):
-            return {}
-        return records
 
     def _flush_locked(self):
         """Write via a temp file so a power cut cannot leave a truncated store."""
@@ -198,7 +204,7 @@ def clean(payload):
         raise ValueError("body must be an object")
 
     anno_id = payload.get("id")
-    if not isinstance(anno_id, str) or not ID_RE.match(anno_id):
+    if not isinstance(anno_id, str) or not ID_RE.fullmatch(anno_id):
         raise ValueError("bad id")
 
     page = payload.get("page")
@@ -216,7 +222,7 @@ def clean(payload):
     }
 
     color = payload.get("color")
-    if isinstance(color, str) and COLOR_RE.match(color):
+    if isinstance(color, str) and COLOR_RE.fullmatch(color):
         record["color"] = color
 
     for field in ("exact", "prefix", "suffix", "note"):
@@ -558,6 +564,14 @@ class Handler(BaseHTTPRequestHandler):
         # Answered before the body is read: a sync request carries no payload,
         # and _body() rejects an empty one.
         if route == "/anno/sync":
+            try:
+                length = int(self.headers.get("Content-Length", "0"))
+            except ValueError:
+                self._reply(400, {"ok": False, "error": "bad Content-Length"})
+                return
+            if length != 0 or self.headers.get("Transfer-Encoding"):
+                self._reply(400, {"ok": False, "error": "sync request cannot have a body"})
+                return
             self._request_sync()
             return
 
@@ -584,7 +598,7 @@ class Handler(BaseHTTPRequestHandler):
 
         elif route == "/anno/delete":
             anno_id = payload.get("id")
-            if not isinstance(anno_id, str) or not ID_RE.match(anno_id):
+            if not isinstance(anno_id, str) or not ID_RE.fullmatch(anno_id):
                 self._reply(400, {"ok": False, "error": "bad id"})
                 return
             removed = STORE.delete(anno_id)
