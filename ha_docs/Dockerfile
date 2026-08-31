@@ -58,4 +58,10 @@ COPY run.sh /run.sh
 RUN nginx -t \
     && chmod a+x /run.sh
 
+# An application-level probe rather than just "is the container still up".
+# /anno/health is served by annotations.py and proxied by nginx, so a failure
+# means one of the two processes this app depends on has gone.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
+    CMD ["python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8099/anno/health', timeout=3)"]
+
 CMD [ "/run.sh" ]

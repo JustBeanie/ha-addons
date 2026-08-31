@@ -527,7 +527,7 @@ class Handler(BaseHTTPRequestHandler):
                 "refreshed": read_marker(REFRESH_MARKER_PATH),
             })
         elif route == "/anno/scan":
-            # Deliberately not folded into /anno/health: the Supervisor watchdog
+            # Deliberately not folded into /anno/health: the Docker HEALTHCHECK
             # probes that on a timer, and it must stay a trivial liveness answer
             # rather than growing a directory walk.
             self._reply(200, scan_status.read_status(

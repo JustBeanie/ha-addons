@@ -362,7 +362,7 @@ repository. The Supervisor shows it in the add-on page URL.
 - The site is fully self-contained; no CDN or web-font requests leave the box.
 - A failed `git fetch` or `mkdocs build` leaves the previously built site in
   place rather than blanking it. Check the add-on log.
-- The Supervisor watchdog probes `/anno/health`, so a failure means nginx or the
+- The Docker healthcheck probes `/anno/health`, so a failure means nginx or the
   annotation store has actually stopped answering — not merely that the
   container exited.
 - The first-ever start serves a placeholder that refreshes itself until the

@@ -215,7 +215,7 @@ An icon, and the reading side of the site catching up with the backend.
 - Previous/next links at the foot of each page, section index pages, and
   scroll-tracked anchors.
 - Retired documents leave the sidebar but stay built, linkable and searchable.
-- The Supervisor watchdog now has an application-level probe (`/anno/health`)
+- The app healthcheck now has an application-level probe (`/anno/health`)
   rather than only noticing if the container itself stops.
 - The first-run "sync in progress" page refreshes itself instead of stranding
   the reader on a dead page.
