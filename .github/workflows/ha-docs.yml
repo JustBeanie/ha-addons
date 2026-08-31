@@ -59,7 +59,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Lint Home Assistant app manifest
-        uses: frenck/action-addon-linter@f995494fd84fa6310d23617e66d0e37de4f14eb # v2.21.0
+        uses: frenck/action-addon-linter@f995494fd84fae6310d23617e66d0e37de4f14eb # v2.21.0
         with:
           path: "./ha_docs"
       - name: Lint Dockerfile
