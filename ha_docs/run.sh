@@ -109,16 +109,24 @@ readonly BUILDER_ID
 # config environment below applies the header only to the Git process that
 # needs it.
 GIT_TOKEN=""
+GIT_AUTH=""
 if bashio::config.has_value 'git_token'; then
     GIT_TOKEN=$(bashio::config 'git_token')
+    # GitHub's Git-over-HTTPS endpoint accepts a PAT as the password in HTTP
+    # Basic authentication. Bearer is valid for the REST API, but Git treats
+    # that header as unauthenticated and falls back to its username prompt.
+    # Keep the encoded credential in the per-process environment only; never
+    # put it in the persistent remote URL or command-line arguments.
+    GIT_AUTH=$(printf 'x-access-token:%s' "${GIT_TOKEN}" | base64 | tr -d '\r\n')
     log_info "Using authenticated access for the docs repository"
 fi
 
 git_with_auth() {
     if [ -n "${GIT_TOKEN}" ]; then
+        GIT_TERMINAL_PROMPT=0 \
         GIT_CONFIG_COUNT=1 \
         GIT_CONFIG_KEY_0=http.extraHeader \
-        GIT_CONFIG_VALUE_0="Authorization: Bearer ${GIT_TOKEN}" \
+        GIT_CONFIG_VALUE_0="Authorization: Basic ${GIT_AUTH}" \
         git "$@"
     else
         git "$@"

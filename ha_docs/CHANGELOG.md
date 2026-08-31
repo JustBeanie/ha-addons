@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.15.1 - 2026-08-31
+
+- Fixed private GitHub repository sync by sending the configured PAT as the
+  Basic-auth password expected by Git-over-HTTPS. The credential remains
+  process-scoped and is never written to the repository remote URL.
+
 ## 1.15.0 - 2026-08-30
 
 The app now has a maintained quality gate and safer runtime defaults.
