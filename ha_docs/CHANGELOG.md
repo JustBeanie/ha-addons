@@ -1,5 +1,26 @@
 # Changelog
 
+## 1.14.1 - 2026-08-30
+
+The watcher hears a save now. 1.14.0 fixed a shape Home Assistant never sends.
+
+- **A save is an `unavailable` round trip, not a disappearance.** 1.14.0 assumed
+  that reloading one automation removes its entity and adds it back, and taught
+  the filter to recognise a state-change event with one side missing. Home
+  Assistant does not do that: the entity's *registry* entry outlives the
+  platform entity, so the reload is published as `off`, `unavailable`, `off`
+  within about two milliseconds. Two ordinary state flips — indistinguishable,
+  to the old filter, from a script running, which is exactly why it discarded
+  them. A transition into or out of `unavailable` is now read as what it is.
+  Verified against the recorder rather than reasoned about: saving the
+  `script.ha_docs_repair_test` fixture writes those three rows and no others.
+- **The null-sided cases are still handled**, because a deletion does take the
+  registry entry with it, and an entity appearing is how a restart arrives.
+- **Its tests now assert the transition that actually happens.** The ones added
+  in 1.14.0 asserted the wrong pair and passed anyway, which is the whole
+  lesson: a predicate over an event shape is worth exactly as much as the
+  evidence that the shape occurs.
+
 ## 1.14.0 - 2026-08-30
 
 A Repairs issue now follows the entity that owns it.

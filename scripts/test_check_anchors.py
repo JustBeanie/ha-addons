@@ -377,18 +377,26 @@ class EntityWatcherEventTests(unittest.TestCase):
             "new_state": self.state("on", mode="restart"),
         }))
 
-    def test_the_removal_half_of_a_reload_is_not_runtime_activity(self):
-        # Saving an automation makes HA drop that one entity and add it back.
-        # Comparing the surviving state against a missing one reads as an
-        # off/on flip, which is what made every edit and every deletion
-        # invisible to the watcher.
+    def test_both_halves_of_a_reload_are_not_runtime_activity(self):
+        # Saving one reloads it as off -> unavailable -> off within about two
+        # milliseconds, because its registry entry outlives the platform
+        # entity. Read as two state flips it is indistinguishable from a script
+        # running, which is how every edit came to be discarded.
+        for old_value, new_value in (("off", "unavailable"), ("unavailable", "off")):
+            self.assertFalse(WATCH.is_runtime_state_change({
+                "entity_id": "script.example",
+                "old_state": self.state(old_value),
+                "new_state": self.state(new_value),
+            }))
+
+    def test_an_outright_removal_is_not_runtime_activity(self):
         self.assertFalse(WATCH.is_runtime_state_change({
             "entity_id": "automation.example",
-            "old_state": self.state("on"),
+            "old_state": self.state("unavailable"),
             "new_state": None,
         }))
 
-    def test_the_addition_half_of_a_reload_is_not_runtime_activity(self):
+    def test_an_entity_appearing_is_not_runtime_activity(self):
         self.assertFalse(WATCH.is_runtime_state_change({
             "entity_id": "automation.example",
             "old_state": None,
