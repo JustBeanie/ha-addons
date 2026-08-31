@@ -72,7 +72,7 @@ jobs:
         env:
           SHELLCHECK_OPTS: -e SC1008 -s bash -x
         with:
-          additional_files: ha_docs/run.sh
+          scandir: ./ha_docs
 
   build:
     name: Build ${{ matrix.arch }} app image
