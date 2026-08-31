@@ -277,7 +277,7 @@ refresh() {
     fi
     touch "${DOC_LINK_READY}"
 
-    local sha stamp previous source_changed=false
+    local sha stamp previous build_time source_changed=false
     sha=$(git -C "${REPO_DIR}" rev-parse HEAD)
     stamp="${sha} ${BUILDER_ID}"
     previous=$(cat "${STAMP_FILE}" 2>/dev/null || true)
@@ -289,7 +289,9 @@ refresh() {
         log_info "Building docs: commit=${sha:0:7} builder=${BUILDER_ID:0:7}"
         # Rendered into the site footer by mkdocs.yml, so a reader can tell which
         # commit they are looking at without opening this log.
-        export DOCS_BUILD_STAMP="commit ${sha:0:7} - built $(date '+%Y-%m-%d %H:%M')"
+        build_time=$(date '+%Y-%m-%d %H:%M')
+        DOCS_BUILD_STAMP="commit ${sha:0:7} - built ${build_time}"
+        export DOCS_BUILD_STAMP
         if build_site; then
             echo "${stamp}" > "${STAMP_FILE}"
             log_info "Docs site published: commit=${sha:0:7}"

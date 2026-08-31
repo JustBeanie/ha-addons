@@ -18,6 +18,8 @@ The app now has a maintained quality gate and safer runtime defaults.
 - Incorporated the upstream watcher correction: a saved automation or script is
   observed through its `off` → `unavailable` → `off` reload round trip, while
   execution state changes remain ignored.
+- Updated the manifest for current Home Assistant app lint rules and moved the
+  health probe to the Docker-native `HEALTHCHECK` directive.
 
 ## 1.14.0 - 2026-08-30
 
