@@ -39,6 +39,7 @@ import urllib.parse
 import urllib.request
 
 import ghslug
+import repairs_registry
 import scan_status
 
 
@@ -62,10 +63,15 @@ def configure_logging(level: str = "info", stream=None) -> None:
         raise ValueError(f"unsupported log level: {level}")
     handler = logging.StreamHandler(stream)
     handler.setFormatter(LocalIsoFormatter("%(asctime)s [%(levelname)s] %(message)s"))
-    LOGGER.handlers.clear()
-    LOGGER.addHandler(handler)
-    LOGGER.setLevel(value)
-    LOGGER.propagate = False
+    # repairs_registry logs a warning an operator has to be able to see, and it
+    # is a sibling logger rather than a child, so it would otherwise reach the
+    # add-on log through the root handler without the timestamp every other
+    # line here carries.
+    for logger in (LOGGER, repairs_registry.LOGGER):
+        logger.handlers.clear()
+        logger.addHandler(handler)
+        logger.setLevel(value)
+        logger.propagate = False
 
 
 configure_logging()
@@ -89,6 +95,10 @@ INDEX_ROW_RE = re.compile(
 # One issue for one condition -- "the site is frozen" -- rather than one per
 # link, because the reader can only act on all of them at once anyway.
 SOURCE_REPAIR_ISSUE_ID = "ha_docs_source_anchors"
+# Every per-entity issue starts with this, and the source issue above
+# deliberately does not: the orphan sweep works by prefix, and the one issue
+# that belongs to no entity must never look sweepable.
+ISSUE_PREFIX = "ha_docs_link_"
 # The check runs on every poll, so the push has to be edge-triggered or it is
 # ~96 identical notifications a day.  A marker file rather than in-memory state
 # because each run is a short-lived subprocess.  Overridable so that a run
@@ -450,7 +460,7 @@ def reconcile_description(entity_id: str, config: dict, repo: pathlib.Path, gith
 
 
 def repair_issue_id(entity_id: str) -> str:
-    return "ha_docs_link_" + re.sub(r"[^a-z0-9_]+", "_", entity_id.casefold())
+    return ISSUE_PREFIX + re.sub(r"[^a-z0-9_]+", "_", entity_id.casefold())
 
 
 def repair_instruction(entity_id: str, config: dict, outcome: str, replacement: str | None, rule: str | None) -> str:
@@ -515,8 +525,25 @@ def check_ha(repo: pathlib.Path, api: CoreApi, github_base: str, report: bool, a
                         LOGGER.info("[ha] Docs-link targeted check skipped: entity=%s reason=not-automation-or-script", entity_id)
                 except CoreApiError as exc:
                     if exc.status == 404:
+                        # The entity has been deleted, or renamed away from this
+                        # id.  Withdraw its issue here rather than leaving it to
+                        # the sweep: this is the path that answers a deletion
+                        # within the watcher's debounce instead of at the next
+                        # poll.  Mirrors the configuration-missing branch below.
                         LOGGER.info("[ha] Docs-link targeted check skipped: entity=%s reason=entity-missing", entity_id)
                         audit(audit_file, entity_id=entity_id, outcome="skipped-missing-entity")
+                        if report:
+                            try:
+                                api.call_service("repairs", "remove", {"issue_id": repair_issue_id(entity_id)})
+                                removal_attempts += 1
+                                LOGGER.info("[ha] Repair removal requested for a deleted entity: entity=%s", entity_id)
+                            except RuntimeError:
+                                # No pre-existing issue is the normal case; the
+                                # remove action is deliberately best-effort.
+                                pass
+                        # Without this the site panel keeps the row until the
+                        # next full scan, even though the entity is gone.
+                        scan_status.write_entity(entity_id, "skipped", reason="entity deleted")
                         continue
                     raise
             entity_ids = live_ids
@@ -659,11 +686,51 @@ def check_ha(repo: pathlib.Path, api: CoreApi, github_base: str, report: bool, a
             )
 
 
+def reap_orphan_issues(api, ws_url: str, token: str, audit_file: pathlib.Path) -> None:
+    """Withdraw Docs-link Repairs whose entity no longer exists.
+
+    A scan can only ever visit entities that exist, so nothing in one can
+    notice an issue left behind by a deleted automation: it is raised against
+    an entity, and then the entity is gone and never comes round again.  The
+    registry is the only record that still knows about it.
+
+    Deliberately silent about failure beyond a log line.  This runs on every
+    poll, ahead of the repository sync, so it must not be able to hold up a
+    build -- a sweep that could not read the registry is a cleanup postponed
+    for fifteen minutes, not a broken check.
+    """
+    open_ids = repairs_registry.open_link_issue_ids(ws_url, token, ISSUE_PREFIX)
+    if open_ids is None:
+        return
+    try:
+        expected = {repair_issue_id(entity_id) for entity_id in api.entity_ids()}
+    except (RuntimeError, OSError) as exc:
+        LOGGER.warning("[ha] Orphaned Repair sweep skipped: entity list unavailable: error=%s", exc)
+        return
+    orphans = sorted(open_ids - expected)
+    withdrawn = 0
+    for issue_id in orphans:
+        try:
+            api.call_service("repairs", "remove", {"issue_id": issue_id})
+        except (RuntimeError, OSError) as exc:
+            LOGGER.warning("[ha] Orphaned Repair could not be withdrawn: issue_id=%s error=%s", issue_id, exc)
+            continue
+        withdrawn += 1
+        audit(audit_file, issue_id=issue_id, outcome="repair-reaped")
+        LOGGER.warning("[ha] Orphaned Repair withdrawn: issue_id=%s reason=entity-no-longer-exists", issue_id)
+    LOGGER.info(
+        "[ha] Orphaned Repair sweep complete: open=%d orphaned=%d withdrawn=%d",
+        len(open_ids), len(orphans), withdrawn,
+    )
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--source", action="store_true")
     ap.add_argument("--site", action="store_true")
     ap.add_argument("--ha", action="store_true", help="validate automation/script Docs links through the HA API")
+    ap.add_argument("--reap", action="store_true",
+                    help="withdraw Docs-link Repairs whose automation or script no longer exists")
     ap.add_argument("--report", action="store_true", help="raise Spook Repairs issues; never modify descriptions")
     ap.add_argument("--log-level", default=os.getenv("HA_DOCS_LOG_LEVEL", "info"),
                     choices=("trace", "debug", "info", "warning", "error"))
@@ -677,12 +744,20 @@ def main() -> int:
                     help="notify service alerted when a failed source check freezes the site, "
                          "e.g. notify.mobile_app_phone; unset raises the Repair only")
     ap.add_argument("--ha-api", default=os.getenv("HA_API_URL", "http://supervisor/core/api"))
+    ap.add_argument("--ws-api", default=os.getenv("HA_DOCS_WS_URL", "ws://supervisor/core/websocket"),
+                    help="websocket API used by --reap; the Repairs registry has no REST endpoint")
     ap.add_argument("--audit-file", type=pathlib.Path, default=pathlib.Path(os.getenv("HA_DOC_LINK_AUDIT", "/data/doc-link-repairs.jsonl")))
     ap.add_argument("repo", type=pathlib.Path)
     ap.add_argument("site_dir", type=pathlib.Path, nargs="?")
     args = ap.parse_args()
     configure_logging(args.log_level)
 
+    if args.reap:
+        token = os.getenv("SUPERVISOR_TOKEN")
+        if not token:
+            ap.error("--reap requires SUPERVISOR_TOKEN")
+        reap_orphan_issues(CoreApi(args.ha_api, token), args.ws_api, token, args.audit_file)
+        return 0
     if args.site:
         if args.site_dir is None:
             ap.error("--site requires site_dir")

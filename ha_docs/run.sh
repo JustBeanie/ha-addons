@@ -186,6 +186,18 @@ reconcile_ha_docs_links() {
         --github-base "${base}" "${REPO_DIR}"
 }
 
+# Withdraw Repairs issues whose automation or script no longer exists. Needs
+# neither the repository nor a GitHub base: it is about Home Assistant state,
+# and the only thing it reads from the docs side is nothing at all.
+reap_orphan_doc_link_repairs() {
+    if [ "${REPORT_DOC_LINK_REPAIRS}" != "true" ]; then
+        return 0
+    fi
+    HA_DOC_LINK_AUDIT="${DOC_LINK_AUDIT}" \
+        python3 /opt/ha_docs/check_anchors.py --reap \
+        --log-level "${LOG_LEVEL}" "${REPO_DIR}"
+}
+
 start_entity_update_watcher() {
     if [ "${REPORT_DOC_LINK_REPAIRS}" != "true" ] || [ "${WATCH_ENTITY_UPDATES}" != "true" ]; then
         log_info "Targeted entity-update Docs-link checks are disabled"
@@ -214,6 +226,16 @@ start_entity_update_watcher() {
 refresh() {
     local reason=$1 started_at=$SECONDS
     log_info "Refresh worker started: reason=${reason}"
+
+    # First, and deliberately outside everything below it. A full scan only
+    # visits entities that still exist, so an issue belonging to a deleted one
+    # is invisible to every other path here. Ahead of sync_repo because it does
+    # not depend on the docs: a site frozen by a broken anchor returns early
+    # further down, and must not take the cleanup of stale Repairs with it.
+    if ! reap_orphan_doc_link_repairs; then
+        log_warning "Orphaned Docs-link Repair sweep failed"
+    fi
+
     if ! sync_repo; then
         log_warning "Repository sync failed; continuing to serve the current site"
         return 1

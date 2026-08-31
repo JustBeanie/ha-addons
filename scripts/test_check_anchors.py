@@ -1,5 +1,6 @@
 """Fixture tests for HA Docs-link validation and conservative repair."""
 
+import asyncio
 import copy
 import importlib.util
 import io
@@ -12,6 +13,7 @@ import tempfile
 import threading
 import time
 import unittest
+from unittest import mock
 
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -21,8 +23,11 @@ CHECK = importlib.util.module_from_spec(SPEC)
 assert SPEC.loader
 SPEC.loader.exec_module(CHECK)
 
-# check_anchors imports it, so this is the same module object the scanner
-# writes through - setting the environment here reaches both.
+# check_anchors imports both, so these are the same module objects the scanner
+# writes and reads through - setting the environment or swapping a function here
+# reaches it too.
+import entity_watch as WATCH  # noqa: E402
+import repairs_registry as REGISTRY  # noqa: E402
 import scan_status as SCAN  # noqa: E402
 
 BASE = "https://github.com/example/docs/blob/main"
@@ -193,6 +198,35 @@ class CheckAnchorsTests(unittest.TestCase):
         self.assertEqual(api.reads["script.legacy"], 1)
         self.assertEqual([call[1] for call in api.services], ["create"])
 
+    def test_targeted_scan_of_a_deleted_entity_withdraws_its_repair(self):
+        api = FakeApi({"script.valid": self.config()})
+
+        def prepare_entity(entity_id):
+            raise CHECK.CoreApiError("GET", f"states/{entity_id}", 404, "not found")
+
+        api.prepare_entity = prepare_entity
+        failures = CHECK.check_ha(
+            self.repo, api, BASE, True, self.audit, selected_entity_ids=["automation.deleted"]
+        )
+        self.assertEqual(failures, 0)
+        self.assertEqual(
+            api.services, [("repairs", "remove", {"issue_id": "ha_docs_link_automation_deleted"})]
+        )
+        self.assertIn('"outcome": "skipped-missing-entity"', self.audit.read_text(encoding="utf-8"))
+
+    def test_a_scan_that_is_not_reporting_withdraws_nothing(self):
+        api = FakeApi({"script.valid": self.config()})
+
+        def prepare_entity(entity_id):
+            raise CHECK.CoreApiError("GET", f"states/{entity_id}", 404, "not found")
+
+        api.prepare_entity = prepare_entity
+        failures = CHECK.check_ha(
+            self.repo, api, BASE, False, self.audit, selected_entity_ids=["automation.deleted"]
+        )
+        self.assertEqual(failures, 0)
+        self.assertEqual(api.services, [])
+
     def test_spook_create_failure_is_reported_without_writing(self):
         api = FakeApi({"script.failed_report": self.config(marker="Docs:")})
 
@@ -292,15 +326,229 @@ class CheckAnchorsTests(unittest.TestCase):
         self.assertIn("entity_watch.py", runner)
         self.assertIn("HA_DOCS_READY_FILE", runner)
 
-    def test_entity_watcher_ignores_script_execution_activity(self):
-        watcher = (ROOT / "ha_docs" / "entity_watch.py").read_text(encoding="utf-8")
-        self.assertIn("is_runtime_state_change", watcher)
-        self.assertIn("Entity runtime activity ignored", watcher)
-        self.assertIn("last_triggered", watcher)
+    def test_orphan_sweep_runs_every_poll_and_ahead_of_the_source_gate(self):
+        runner = (ROOT / "ha_docs" / "run.sh").read_text(encoding="utf-8")
+        self.assertIn("check_anchors.py --reap", runner)
+        body = runner[runner.index("refresh() {"):runner.index("# nginx needs something to serve")]
+        # Ahead of sync_repo, and so ahead of the source check that returns
+        # early: a site frozen by a broken anchor must still withdraw Repairs
+        # for automations that no longer exist.
+        self.assertLess(
+            body.index("if ! reap_orphan_doc_link_repairs; then"),
+            body.index("if ! sync_repo; then"),
+        )
 
     def test_issue_ids_are_stable_and_entity_specific(self):
         self.assertEqual(CHECK.repair_issue_id("script.Wake-Up Stage 1"), "ha_docs_link_script_wake_up_stage_1")
         self.assertNotEqual(CHECK.repair_issue_id("script.one"), CHECK.repair_issue_id("script.two"))
+
+
+class EntityWatcherEventTests(unittest.TestCase):
+    """Which state_changed events count as a configuration edit.
+
+    This predicate is the whole of the targeted checker's trigger: whatever it
+    calls runtime activity is dropped and never checked. Through 1.13.0 that
+    included saving an automation, which is the one event it exists to catch.
+    """
+
+    @staticmethod
+    def state(value, **attributes):
+        return {"state": value, "attributes": attributes}
+
+    def test_script_execution_is_runtime_activity(self):
+        for old_value, new_value in (("off", "on"), ("on", "off")):
+            self.assertTrue(WATCH.is_runtime_state_change({
+                "entity_id": "script.example",
+                "old_state": self.state(old_value),
+                "new_state": self.state(new_value),
+            }))
+
+    def test_last_run_metadata_alone_is_runtime_activity(self):
+        self.assertTrue(WATCH.is_runtime_state_change({
+            "entity_id": "automation.example",
+            "old_state": self.state("on", mode="single", last_triggered="1", current=0),
+            "new_state": self.state("on", mode="single", last_triggered="2", current=1),
+        }))
+
+    def test_a_changed_configuration_attribute_is_not_runtime_activity(self):
+        self.assertFalse(WATCH.is_runtime_state_change({
+            "entity_id": "automation.example",
+            "old_state": self.state("on", mode="single"),
+            "new_state": self.state("on", mode="restart"),
+        }))
+
+    def test_the_removal_half_of_a_reload_is_not_runtime_activity(self):
+        # Saving an automation makes HA drop that one entity and add it back.
+        # Comparing the surviving state against a missing one reads as an
+        # off/on flip, which is what made every edit and every deletion
+        # invisible to the watcher.
+        self.assertFalse(WATCH.is_runtime_state_change({
+            "entity_id": "automation.example",
+            "old_state": self.state("on"),
+            "new_state": None,
+        }))
+
+    def test_the_addition_half_of_a_reload_is_not_runtime_activity(self):
+        self.assertFalse(WATCH.is_runtime_state_change({
+            "entity_id": "automation.example",
+            "old_state": None,
+            "new_state": self.state("on"),
+        }))
+
+    def test_an_event_without_an_entity_id_stays_visible(self):
+        self.assertFalse(WATCH.is_runtime_state_change({"old_state": None, "new_state": None}))
+
+    def test_the_watcher_module_imports_without_its_websocket_dependency(self):
+        """Every test above is only reachable while that import stays local."""
+        watcher = (ROOT / "ha_docs" / "entity_watch.py").read_text(encoding="utf-8")
+        self.assertNotIn("\nimport websockets\n", watcher)
+
+
+class EntityWatcherBatchTests(unittest.IsolatedAsyncioTestCase):
+    """One check per burst of events, rather than one per entity.
+
+    A saved automation arrives as a pair of events, but a Home Assistant restart
+    adds every automation and script back at once, and a subprocess each would
+    be around two hundred of them doing the work of one scan.
+    """
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        ready = pathlib.Path(self.tmp.name) / "ready"
+        ready.write_text("", encoding="utf-8")
+        environment = {
+            "SUPERVISOR_TOKEN": "token",
+            "HA_DOCS_REPO_DIR": self.tmp.name,
+            "HA_DOCS_GITHUB_BASE": BASE,
+            "HA_DOC_LINK_AUDIT": str(pathlib.Path(self.tmp.name) / "audit.jsonl"),
+            "HA_DOCS_READY_FILE": str(ready),
+            "HA_DOCS_ENTITY_DEBOUNCE": "0",
+        }
+        for name, value in environment.items():
+            self.addCleanup(os.environ.pop, name, None)
+            os.environ[name] = value
+
+    async def drain(self, watcher):
+        """Let the surviving debounce run, then the check it spawns."""
+        await watcher.debounce
+        await asyncio.gather(*watcher.running, return_exceptions=True)
+
+    async def test_a_burst_of_events_becomes_a_single_check(self):
+        watcher = WATCH.EntityWatcher()
+        calls = []
+
+        class FakeProcess:
+            async def wait(self):
+                return 0
+
+        async def create_subprocess_exec(*args, **kwargs):
+            calls.append(args)
+            return FakeProcess()
+
+        with mock.patch.object(asyncio, "create_subprocess_exec", create_subprocess_exec):
+            watcher.queue_check("automation.beta")
+            watcher.queue_check("automation.alpha")
+            # The same entity twice is one entry, not two: saving one produces a
+            # removal and an addition, and both mean the same check.
+            watcher.queue_check("automation.beta")
+            await self.drain(watcher)
+
+        self.assertEqual(len(calls), 1)
+        argv = calls[0]
+        selected = [argv[i + 1] for i, value in enumerate(argv) if value == "--entity-id"]
+        self.assertEqual(selected, ["automation.alpha", "automation.beta"])
+        self.assertEqual(watcher.pending, set())
+
+    async def test_a_batch_is_named_by_its_entity_only_when_there_is_one(self):
+        watcher = WATCH.EntityWatcher()
+        self.assertEqual(watcher.described(["script.only"]), "script.only")
+        self.assertEqual(watcher.described(["script.a", "script.b"]), "2 changed entities")
+
+
+class RepairsRegistryTests(unittest.TestCase):
+    """Reading open issue ids out of a repairs/list_issues result."""
+
+    def test_spooks_user_prefix_is_stripped_and_other_issues_ignored(self):
+        payload = {"result": {"issues": [
+            {"issue_id": "user_ha_docs_link_automation_gone", "domain": "spook"},
+            {"issue_id": "ha_docs_link_script_bare", "domain": "spook"},
+            {"issue_id": "user_ha_docs_source_anchors", "domain": "spook"},
+            {"issue_id": "restart_required_1_tags/v1", "domain": "hacs"},
+            "not a dict at all",
+        ]}}
+        self.assertEqual(
+            REGISTRY.link_issue_ids(payload, CHECK.ISSUE_PREFIX),
+            {"ha_docs_link_automation_gone", "ha_docs_link_script_bare"},
+        )
+
+    def test_the_source_issue_can_never_be_swept(self):
+        self.assertFalse(CHECK.SOURCE_REPAIR_ISSUE_ID.startswith(CHECK.ISSUE_PREFIX))
+
+    def test_a_malformed_result_reads_as_empty_rather_than_raising(self):
+        for payload in (None, {}, {"result": {}}, {"result": {"issues": {}}}):
+            self.assertEqual(REGISTRY.link_issue_ids(payload, CHECK.ISSUE_PREFIX), set())
+
+
+class OrphanSweepTests(unittest.TestCase):
+    """Withdrawing a Repair whose automation or script no longer exists."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.audit = pathlib.Path(self.tmp.name) / "audit.jsonl"
+        self.addCleanup(
+            setattr, REGISTRY, "open_link_issue_ids", REGISTRY.open_link_issue_ids
+        )
+
+    def registry(self, value):
+        REGISTRY.open_link_issue_ids = lambda *args, **kwargs: value
+
+    def reap(self, api):
+        CHECK.reap_orphan_issues(api, "ws://example/websocket", "token", self.audit)
+
+    def test_an_issue_without_an_entity_is_withdrawn_and_a_live_one_is_left(self):
+        self.registry({"ha_docs_link_automation_gone", "ha_docs_link_script_valid"})
+        api = FakeApi({"script.valid": {}})
+        self.reap(api)
+        self.assertEqual(
+            api.services, [("repairs", "remove", {"issue_id": "ha_docs_link_automation_gone"})]
+        )
+        self.assertIn('"outcome": "repair-reaped"', self.audit.read_text(encoding="utf-8"))
+
+    def test_an_unreadable_registry_withdraws_nothing(self):
+        self.registry(None)
+        api = FakeApi({"script.valid": {}})
+        self.reap(api)
+        self.assertEqual(api.services, [])
+        self.assertFalse(self.audit.exists())
+
+    def test_an_unavailable_entity_list_withdraws_nothing(self):
+        self.registry({"ha_docs_link_automation_gone"})
+        api = FakeApi({})
+
+        def entity_ids():
+            raise RuntimeError("HA is restarting")
+
+        api.entity_ids = entity_ids
+        self.reap(api)
+        self.assertEqual(api.services, [])
+
+    def test_one_failed_withdrawal_does_not_abandon_the_rest(self):
+        self.registry({"ha_docs_link_automation_first", "ha_docs_link_automation_second"})
+        api = FakeApi({})
+        original = api.call_service
+
+        def call_service(domain, service, data):
+            if data["issue_id"].endswith("_first"):
+                raise RuntimeError("repairs.remove unavailable")
+            original(domain, service, data)
+
+        api.call_service = call_service
+        self.reap(api)
+        self.assertEqual(
+            api.services, [("repairs", "remove", {"issue_id": "ha_docs_link_automation_second"})]
+        )
 
 
 class ScanStatusTests(unittest.TestCase):

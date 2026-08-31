@@ -1,5 +1,48 @@
 # Changelog
 
+## 1.14.0 - 2026-08-30
+
+A Repairs issue now follows the entity that owns it.
+
+- **An edited automation is checked again.** The targeted watcher had not run a
+  single check since it shipped, and the log said so plainly once anyone looked:
+  twelve full scans across one evening and no targeted ones at all. Saving an
+  automation makes Home Assistant remove that one entity and add it back, so
+  both halves arrive as a state-change event with one side missing — and
+  comparing the surviving state against nothing read as an ordinary off/on flip,
+  which is exactly the script-execution case the filter exists to discard. A
+  description lives in the configuration and never in the entity attributes, so
+  that half-present event is the only evidence of an edit there is. An entity
+  being added or removed is now treated as what it is: a configuration event.
+- **A deleted automation takes its issue with it.** Two paths had to change,
+  because a deletion is invisible to a scan by construction: a scan enumerates
+  the entities that exist, and this one no longer does. A targeted check that
+  finds the entity missing now withdraws its Repair — the configuration-missing
+  branch beside it already did — and clears its row from the site panel too.
+- **Every poll sweeps the Repairs registry.** The targeted check only covers a
+  deletion the add-on was running for. The sweep is the backstop: it reads the
+  open issues over the websocket API, since the core REST API this add-on
+  otherwise uses has no repairs endpoint, and withdraws every `ha_docs_link_*`
+  issue with no entity behind it. It runs first in the refresh pass, ahead of
+  the repository fetch and outside the source check that freezes the site, on
+  the grounds that stale Repairs about Home Assistant should not wait on a
+  broken anchor in the docs. A registry it cannot read is one cleanup postponed
+  for a poll, never a failed check, and the one issue belonging to no entity
+  — *HA Docs site is frozen* — is outside the swept prefix by construction.
+- **A burst of events is one check, not one each.** Honouring additions means
+  hearing a Home Assistant restart, which puts every automation and script back
+  at once — about two hundred here, and a subprocess each would be a thundering
+  herd doing the work of one scan. Events are now debounced into a batch and
+  passed to a single targeted check, which the checker already accepted: it has
+  taken a repeatable `--entity-id` since the watcher shipped. A restart
+  therefore reconciles the whole instance once, which nothing else does unless
+  the documentation happens to change.
+- **The event filter is tested rather than grepped.** Its only test asserted
+  that three words appeared somewhere in the file, all of which did, throughout.
+  It is now exercised as a function, including both halves of a reload, and the
+  websockets import moved inside the connect call so the predicate can be tested
+  without the package.
+
 ## 1.13.0 - 2026-08-28
 
 Table columns sort when you click their header.
