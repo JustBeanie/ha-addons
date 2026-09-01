@@ -1,101 +1,106 @@
+---
 name: BACnet MQTT Gateway
 
 on:
+  pull_request:
+    paths:
+      - "bacnet_mqtt_gateway/**"
+      - ".github/workflows/bacnet-mqtt-gateway.yml"
   push:
     branches:
       - main
     paths:
       - "bacnet_mqtt_gateway/**"
       - ".github/workflows/bacnet-mqtt-gateway.yml"
-  pull_request:
-    paths:
-      - "bacnet_mqtt_gateway/**"
-      - ".github/workflows/bacnet-mqtt-gateway.yml"
+  schedule:
+    - cron: "41 4 * * 0"
   workflow_dispatch:
 
 permissions:
   contents: read
 
+concurrency:
+  group: bacnet-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  app-lint:
-    name: Home Assistant App lint
-    runs-on: ubuntu-latest
+  manifest:
+    name: Manifest tests
+    runs-on: ubuntu-24.04
     steps:
       - name: Check out repository
-        uses: actions/checkout@v7.0.1
-      # v2.21 predates Supervisor's 2026.07 app_config rename. Lint a
-      # compatibility copy until the action publishes its updated schema; the
-      # Jest manifest test below validates the real, current manifest.
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: "3.13"
+      - name: Install test dependencies
+        run: pip install --disable-pip-version-check pyyaml
+      - name: Run manifest tests
+        working-directory: bacnet_mqtt_gateway
+        run: python -m unittest discover -s tests -v
+
+  lint:
+    name: Static analysis
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # v2.21 predates Supervisor's 2026.07 app_config rename, so lint a
+      # compatibility copy. The manifest job above asserts against the real,
+      # current file.
       - name: Prepare linter compatibility copy
         run: |
           mkdir -p .lint
           cp -a bacnet_mqtt_gateway .lint/bacnet_mqtt_gateway
           sed -i 's/type: app_config/type: addon_config/' .lint/bacnet_mqtt_gateway/config.yaml
-      - name: Run Home Assistant App linter
-        uses: frenck/action-addon-linter@v2.21
+      - name: Lint Home Assistant app manifest
+        uses: frenck/action-addon-linter@f995494fd84fae6310d23617e66d0e37de4f14eb # v2.21.0
         with:
           path: ./.lint/bacnet_mqtt_gateway
 
-  test:
-    name: Node.js ${{ matrix.node }} tests
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        node:
-          - 22
-          - 24
-    defaults:
-      run:
-        working-directory: bacnet_mqtt_gateway
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v7.0.1
-      - name: Set up Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: ${{ matrix.node }}
-          cache: npm
-          cache-dependency-path: bacnet_mqtt_gateway/package-lock.json
-      - name: Install locked dependencies
-        run: npm ci
-      - name: Audit dependencies
-        run: npm audit --audit-level=high
-      - name: Run test suite with coverage gate
-        run: npm run test:coverage -- --runInBand
-
   image:
-    name: Build ${{ matrix.arch }} image
-    runs-on: ubuntu-latest
+    name: Published ${{ matrix.arch }} image
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - arch: amd64
-            platform: linux/amd64
-          - arch: aarch64
-            platform: linux/arm64
+        arch:
+          - amd64
+          - aarch64
     steps:
       - name: Check out repository
-        uses: actions/checkout@v7.0.1
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v4
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
-      - name: Read app version
-        id: app
-        shell: bash
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # This app declares `image:`, so Supervisor pulls rather than builds. A
+      # version bump with no published tag would leave an app that cannot be
+      # installed, and a package left private would fail the same way. Resolve
+      # the manifest anonymously, exactly as the Supervisor host does.
+      - name: Resolve the image this manifest asks for
+        env:
+          APP_ARCH: ${{ matrix.arch }}
         run: |
+          set -euo pipefail
           version="$(sed -n 's/^version: "\(.*\)"/\1/p' bacnet_mqtt_gateway/config.yaml)"
           test -n "${version}"
-          echo "version=${version}" >> "${GITHUB_OUTPUT}"
-      - name: Build app image
-        uses: docker/build-push-action@v7
-        with:
-          context: ./bacnet_mqtt_gateway
-          platforms: ${{ matrix.platform }}
-          push: false
-          tags: local/bacnet-mqtt-gateway:${{ matrix.arch }}
-          build-args: |
-            BUILD_ARCH=${{ matrix.arch }}
-            BUILD_VERSION=${{ steps.app.outputs.version }}
+          repo="justbeanie/bacnet-mqtt-gateway-${APP_ARCH}"
+          echo "Resolving ghcr.io/${repo}:${version}"
+          token="$(curl -fsSL "https://ghcr.io/token?scope=repository:${repo}:pull&service=ghcr.io" | jq -r .token)"
+          test -n "${token}"
+          if ! curl -fsSL -o /dev/null \
+              -H "Authorization: Bearer ${token}" \
+              -H "Accept: application/vnd.oci.image.manifest.v1+json" \
+              -H "Accept: application/vnd.oci.image.index.v1+json" \
+              -H "Accept: application/vnd.docker.distribution.manifest.v2+json" \
+              -H "Accept: application/vnd.docker.distribution.manifest.list.v2+json" \
+              "https://ghcr.io/v2/${repo}/manifests/${version}"; then
+            echo "::error::ghcr.io/${repo}:${version} is not anonymously pullable."
+            echo "::error::Tag v${version} in JustBeanie/bacnet-mqtt-gateway and confirm the package is public."
+            exit 1
+          fi
+          echo "ghcr.io/${repo}:${version} is published and public."

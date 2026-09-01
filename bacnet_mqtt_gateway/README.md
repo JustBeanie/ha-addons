@@ -15,3 +15,16 @@ The app provides:
 
 BACnet broadcast traffic requires host networking. The web console itself only
 accepts Home Assistant ingress traffic.
+
+## Where the source lives
+
+This folder is the Home Assistant app manifest only — `config.yaml`, the
+options schema and its translations, the AppArmor profile, and the
+documentation shown in the app's tabs.
+
+The application source, its test suite, and the container build are in
+[JustBeanie/bacnet-mqtt-gateway](https://github.com/JustBeanie/bacnet-mqtt-gateway).
+Each release tag there publishes
+`ghcr.io/justbeanie/bacnet-mqtt-gateway-amd64` and `-aarch64`, and the
+`image:` key in `config.yaml` pulls the tag matching its `version:`. Nothing is
+built on the Home Assistant host.

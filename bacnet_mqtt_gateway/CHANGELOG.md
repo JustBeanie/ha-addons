@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.0.1
+
+- Install a prebuilt image instead of building on the Home Assistant host. The
+  application source, tests, and container build now live in
+  [JustBeanie/bacnet-mqtt-gateway](https://github.com/JustBeanie/bacnet-mqtt-gateway),
+  which publishes `ghcr.io/justbeanie/bacnet-mqtt-gateway-{arch}` per release
+  tag; this repository keeps the app manifest, options schema, translations,
+  AppArmor profile, and documentation.
+- No functional change to the gateway itself.
+
 ## 2.0.0
 
 - Add native Home Assistant OS/Supervisor app packaging for `amd64` and

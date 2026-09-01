@@ -107,7 +107,8 @@ components, absolute paths, and TLS-file symlinks that leave `/config` are
 rejected at startup.
 
 You can also manage device JSON files directly. Start with
-`device.example.json` from the app source and name active files
+[`device.example.json`](https://github.com/JustBeanie/bacnet-mqtt-gateway/blob/master/device.example.json)
+in the source repository and name active files
 `device.<device-id>.json`. Prefix a file with `_` to disable loading it. The web
 console is recommended because it discovers valid object identifiers and writes
 the same format safely.
@@ -187,6 +188,16 @@ options. TLS files are rejected when MQTT TLS is disabled.
 
 Check the gateway ID, broker ACLs, app logs, and the device polling configuration
 in the web console. Set `log_level` to `debug` temporarily for more detail.
+
+## Source and images
+
+The application source, its test suite, and the container build live in
+[JustBeanie/bacnet-mqtt-gateway](https://github.com/JustBeanie/bacnet-mqtt-gateway).
+Each release tag there publishes `ghcr.io/justbeanie/bacnet-mqtt-gateway-amd64`
+and `-aarch64`; this app declares `image:` and installs the tag matching its
+version, so nothing is compiled on the Home Assistant host. This repository owns
+the app manifest, the options schema and its translations, the AppArmor profile,
+and this documentation.
 
 ## Support
 
