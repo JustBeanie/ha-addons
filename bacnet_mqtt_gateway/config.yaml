@@ -1,5 +1,5 @@
 name: "BACnet MQTT Gateway"
-version: "2.0.1"
+version: "2.0.2"
 slug: "bacnet_mqtt_gateway"
 description: >-
   Poll BACnet/IP devices, publish their data to MQTT, and expose a Home Assistant
@@ -16,8 +16,11 @@ arch:
 # the workflow gates on exactly that.
 image: "ghcr.io/justbeanie/bacnet-mqtt-gateway-{arch}"
 
-startup: application
-boot: auto
+# `startup: application`, `boot: auto`, `panel_admin: true`, and `apparmor: true`
+# are omitted deliberately: each is already the default, and the app linter
+# rejects restating one. AppArmor stays enabled because apparmor.txt is present.
+# Container health is a HEALTHCHECK in the image rather than the obsolete
+# `watchdog:` key, which the linter also rejects.
 init: false
 stage: experimental
 host_network: true
@@ -26,9 +29,6 @@ ingress_port: 18082
 ingress_entry: admin/
 panel_icon: mdi:router-network
 panel_title: BACnet Gateway
-panel_admin: true
-apparmor: true
-watchdog: "http://[HOST]:18082/health"
 backup: cold
 timeout: 15
 services:

@@ -66,6 +66,18 @@ class AppManifestTests(unittest.TestCase):
             "a Dockerfile here would make Supervisor build locally and ignore image:",
         )
 
+    def test_omits_keys_the_app_linter_rejects(self):
+        # Restating a default is an error, not a warning, and `watchdog:` is
+        # obsolete in favour of the image's HEALTHCHECK. Each of these has a
+        # default that matches what the app used to state explicitly, so
+        # removing them changed nothing about how it runs.
+        for key in ("startup", "boot", "panel_admin", "apparmor", "watchdog"):
+            self.assertNotIn(
+                key,
+                self.manifest,
+                f"{key} makes the Home Assistant app linter fail",
+            )
+
     def test_version_is_a_plain_release_tag(self):
         # The workflow resolves this value against GHCR, so it has to be a tag
         # the release workflow in the source repository can actually publish.

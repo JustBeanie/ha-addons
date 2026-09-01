@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.0.2
+
+- Drop `startup`, `boot`, `panel_admin`, and `apparmor` from the manifest. Each
+  restated its own default, which the Home Assistant app linter rejects, so the
+  app runs exactly as before; AppArmor stays enabled because `apparmor.txt` is
+  present.
+- Replace the obsolete `watchdog:` key with a Docker `HEALTHCHECK` in the image.
+  It probes the same `/health` endpoint and reports the same condition.
+
 ## 2.0.1
 
 - Install a prebuilt image instead of building on the Home Assistant host. The
