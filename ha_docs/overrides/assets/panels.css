@@ -1,0 +1,30 @@
+/* Independent desktop controls for Material's primary and secondary sidebar. */
+
+.ha-docs-panel-toggle {
+  display: none;
+}
+
+.ha-docs-panel-toggle svg {
+  width: 1.2rem;
+  height: 1.2rem;
+  fill: currentColor;
+}
+
+@media screen and (min-width: 76.25em) {
+  .ha-docs-panel-toggle {
+    display: block;
+  }
+
+  /* Material's wide layout is a flex row, so removing either sidebar lets the
+     article naturally use the room it vacated without hard-coded widths. */
+  body[data-ha-docs-navigation-collapsed] .md-sidebar--primary,
+  body[data-ha-docs-contents-collapsed] .md-sidebar--secondary {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ha-docs-panel-toggle {
+    transition: none;
+  }
+}

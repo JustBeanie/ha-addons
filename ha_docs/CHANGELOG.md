@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.15.2 - 2026-09-02
+
+- Added independent **Hide navigation** and **Hide contents** controls to the
+  desktop site header. Each sidebar can now be collapsed to give the document
+  more room, and the selected state is remembered in that browser. Material's
+  existing mobile navigation drawers are unchanged.
+
 ## 1.15.1 - 2026-08-31
 
 - Fixed private GitHub repository sync by sending the configured PAT as the

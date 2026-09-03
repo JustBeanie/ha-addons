@@ -117,6 +117,9 @@ extra_javascript:
   # Live status for both link checkers. Reads /anno/scan; mounts into
   # annotate.js's drawer on a narrow screen, so it must load after it.
   - assets/checker.js
+  # Independent controls for the navigation and table-of-contents sidebars on
+  # wide screens. Material's normal drawer controls remain in charge on mobile.
+  - assets/panels.js
   # Click-to-sort table headers. No load-order dependency of its own - it
   # touches nothing the others own, and reads no global.
   - assets/tables.js
@@ -125,6 +128,7 @@ extra_css:
   - assets/diagrams.css
   - assets/annotate.css
   - assets/checker.css
+  - assets/panels.css
   - assets/tables.css
 
 plugins:

@@ -154,6 +154,17 @@ integration, but it loads a library from a CDN and needs a separate file per
 data type, so the sort is written into the add-on instead — about a hundred and
 forty lines, no new download, no new version to keep pinned.
 
+### Collapsible sidebars
+
+On a desktop-width view, the site header has a **Hide navigation** button and a
+**Hide contents** button. They independently collapse the document tree and
+the on-page table of contents, so either can be put away to make room for the
+document. The button changes to **Show** when its panel is hidden, and each
+choice is remembered by the browser.
+
+On smaller screens Material already presents both panels as drawers, so these
+extra desktop controls stay out of the way and the normal menu controls apply.
+
 ### GitHub-identical heading anchors
 
 This is the part that matters if your docs cross-link to headings.
