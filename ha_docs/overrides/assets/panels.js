@@ -10,6 +10,8 @@
   "use strict";
 
   var STORAGE_PREFIX = "ha-docs:panel:";
+  var DESKTOP_QUERY = "(min-width: 76.25em)";
+  var desktopMediaQuery = window.matchMedia(DESKTOP_QUERY);
   var panels = [
     {
       name: "navigation",
@@ -85,15 +87,45 @@
       apply(panel, next);
       write(panel.name, next);
     });
-    header.appendChild(button);
+    // Keep the navigation control with the left side of the desktop header.
+    // The contents control remains at the right with the other utility buttons.
+    if (panel.name === "navigation") {
+      header.insertBefore(button, header.firstChild);
+    } else {
+      header.appendChild(button);
+    }
+  }
+
+  function removeButtons() {
+    for (var i = 0; i < panels.length; i++) {
+      if (panels[i].button && panels[i].button.parentNode) {
+        panels[i].button.parentNode.removeChild(panels[i].button);
+      }
+      panels[i].button = null;
+    }
+  }
+
+  function sync() {
+    // Material supplies the native navigation drawer control on smaller
+    // screens. Do not add either custom control there: the secondary sidebar
+    // is not a separate mobile drawer, and a duplicate hamburger is confusing.
+    if (!desktopMediaQuery.matches) {
+      removeButtons();
+      return;
+    }
+
+    for (var i = 0; i < panels.length; i++) {
+      addButton(panels[i]);
+    }
   }
 
   function start() {
-    // Material supplies drawer toggles at smaller widths. The controls remain
-    // in the DOM for a stable preference, but CSS hides them until both
-    // sidebars are actually part of the desktop layout.
-    for (var i = 0; i < panels.length; i++) {
-      addButton(panels[i]);
+    sync();
+    if (desktopMediaQuery.addEventListener) {
+      desktopMediaQuery.addEventListener("change", sync);
+    } else {
+      // Safari versions that predate MediaQueryList.addEventListener.
+      desktopMediaQuery.addListener(sync);
     }
   }
 

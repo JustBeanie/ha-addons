@@ -12,7 +12,7 @@
 
 @media screen and (min-width: 76.25em) {
   .ha-docs-panel-toggle {
-    display: block;
+    display: flex;
   }
 
   /* Material's wide layout is a flex row, so removing either sidebar lets the

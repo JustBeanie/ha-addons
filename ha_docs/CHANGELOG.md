@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.15.3 - 2026-09-05
+
+- Kept the custom sidebar controls desktop-only, so mobile has one clear
+  navigation hamburger and does not show a duplicate control for the primary
+  sidebar.
+- Moved the desktop **Hide navigation** control to the left side of the header;
+  **Hide contents** remains with the utility controls on the right.
+
 ## 1.15.2 - 2026-09-02
 
 - Added independent **Hide navigation** and **Hide contents** controls to the

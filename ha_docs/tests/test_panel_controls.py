@@ -20,6 +20,9 @@ class PanelControlTests(unittest.TestCase):
         self.assertIn('selector: ".md-sidebar--primary"', script)
         self.assertIn('selector: ".md-sidebar--secondary"', script)
         self.assertIn("window.localStorage", script)
+        self.assertIn('var DESKTOP_QUERY = "(min-width: 76.25em)"', script)
+        self.assertIn("header.insertBefore(button, header.firstChild)", script)
+        self.assertIn("removeButtons();", script)
         self.assertIn("data-ha-docs-navigation-collapsed", stylesheet)
         self.assertIn("data-ha-docs-contents-collapsed", stylesheet)
 

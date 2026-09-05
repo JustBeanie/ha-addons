@@ -162,8 +162,10 @@ the on-page table of contents, so either can be put away to make room for the
 document. The button changes to **Show** when its panel is hidden, and each
 choice is remembered by the browser.
 
-On smaller screens Material already presents both panels as drawers, so these
-extra desktop controls stay out of the way and the normal menu controls apply.
+On smaller screens Material's native hamburger controls apply. The custom
+desktop controls are not added at all, so mobile has one clear navigation
+hamburger rather than a duplicate control for the primary sidebar; the
+secondary contents panel does not need a separate mobile toggle.
 
 ### GitHub-identical heading anchors
 
