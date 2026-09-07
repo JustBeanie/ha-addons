@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.2.4
+
+- Install the explicit `libexpat1` runtime dependency required by `hyperiond`.
+
 ## 2.2.3
 
 - Correct the SHA-256 checksums for the official Debian packages.

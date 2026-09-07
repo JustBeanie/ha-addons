@@ -1,7 +1,7 @@
 name: "Hyperion.NG"
 slug: "hyperion_ng"
 description: "Runs Hyperion.NG from the official release package with Home Assistant ingress support."
-version: "2.2.3"
+version: "2.2.4"
 url: "https://github.com/JustBeanie/ha-addons/tree/main/hyperion_ng"
 
 arch:
