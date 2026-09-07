@@ -25,6 +25,7 @@ Set these paths in Hyperion.NG's Web Configuration settings (`Certificate path` 
 | Port | Service | Description |
 |------|---------|-------------|
 | 8090/tcp | HTTP | Hyperion Web UI |
+| 8092/tcp | HTTPS | Hyperion Web UI (when native HTTPS is enabled) |
 | 19444/tcp | JSON | Hyperion JSON Server |
 | 19445/tcp | Proto | Hyperion Proto Server |
 

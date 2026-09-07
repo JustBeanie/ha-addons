@@ -36,11 +36,13 @@ devices:
 # Expose UI + services (even with host networking, this documents the ports in HA)
 ports:
   8090/tcp: 8090
+  8092/tcp: 8092
   19444/tcp: 19444
   19445/tcp: 19445
 
 ports_description:
   8090/tcp: "Hyperion Web UI"
+  8092/tcp: "Hyperion Web UI (HTTPS)"
   19444/tcp: "Hyperion JSON Server"
   19445/tcp: "Hyperion Proto Server"
 
