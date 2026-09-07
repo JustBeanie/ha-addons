@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.2.5
+
+- Install the explicit `libfontconfig1` runtime dependency required by
+  `hyperiond`.
+
 ## 2.2.4
 
 - Install the explicit `libexpat1` runtime dependency required by `hyperiond`.
