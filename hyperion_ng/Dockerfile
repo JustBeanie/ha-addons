@@ -1,5 +1,4 @@
-ARG BUILD_FROM
-FROM ${BUILD_FROM}
+FROM ghcr.io/home-assistant/base-debian:bookworm
 
 ARG BUILD_ARCH
 ARG BUILD_VERSION
@@ -19,11 +18,11 @@ RUN set -euo pipefail; \
     case "${BUILD_ARCH}" in \
         amd64) \
             HYPERION_ARCH="amd64"; \
-            HYPERION_SHA256="75ba1ed3f6d177d17d78d81d34776cdd36b1b564192c5e79475c6207999caf70"; \
+            HYPERION_SHA256="8e30585049421297455387564f8df2c87603f0f8557bc95abca102be27e872b9"; \
             ;; \
         aarch64) \
             HYPERION_ARCH="arm64"; \
-            HYPERION_SHA256="39e7e8211e576e2dea89825ce016f02649eb2e3dff2fb1fc2a8b5da09879b229"; \
+            HYPERION_SHA256="ee5e9eaeeb4a6bc69174b15dcb316de274cc77dab93fc5c370905e04ca2f056b"; \
             ;; \
         *) echo "Unsupported Home Assistant architecture: ${BUILD_ARCH}" >&2; exit 1 ;; \
     esac; \

@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.2.3
+
+- Correct the SHA-256 checksums for the official Debian packages.
+- Use the Supervisor-native base image declaration instead of deprecated
+  `build.yaml` build parameters.
+- Use the current list-only `devices` manifest format.
+- Remove the redundant `webui` field because ingress is enabled.
+
 ## 2.2.2
 
 - Build and own the app image from the Home Assistant Debian base instead of

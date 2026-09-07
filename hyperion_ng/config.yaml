@@ -1,7 +1,7 @@
 name: "Hyperion.NG"
 slug: "hyperion_ng"
 description: "Runs Hyperion.NG from the official release package with Home Assistant ingress support."
-version: "2.2.2"
+version: "2.2.3"
 url: "https://github.com/JustBeanie/ha-addons/tree/main/hyperion_ng"
 
 arch:
@@ -22,18 +22,17 @@ ingress_port: 8090
 ingress_entry: /
 panel_icon: "mdi:television-ambient-light"
 panel_title: "Hyperion.NG"
-webui: "http://[HOST]:[PORT:8090]/"
 
 environment:
   QT_QPA_PLATFORM: offscreen
   XDG_RUNTIME_DIR: /run
 
 devices:
-  - /dev/ttyUSB0:/dev/ttyUSB0
-  - /dev/ttyACM0:/dev/ttyACM0
-  - /dev/spidev0.0:/dev/spidev0.0
-  - /dev/mem:/dev/mem
-  - /dev/vcio:/dev/vcio
+  - /dev/ttyUSB0
+  - /dev/ttyACM0
+  - /dev/spidev0.0
+  - /dev/mem
+  - /dev/vcio
 
 # Expose UI + services (even with host networking, this documents the ports in HA)
 ports:
