@@ -1,7 +1,7 @@
 name: "Hyperion.NG"
 slug: "hyperion_ng"
 description: "Runs Hyperion.NG using sirfragalot/hyperion.ng with Home Assistant ingress support."
-version: "2.2.0"
+version: "2.2.1"
 url: "https://hub.docker.com/r/sirfragalot/hyperion.ng"
 
 arch:
@@ -9,7 +9,8 @@ arch:
   - aarch64
   - armv7
 
-image: "sirfragalot/hyperion.ng"
+# Build a local add-on image so manifest-only changes receive a new Supervisor
+# version even though the upstream Hyperion image remains pinned at 2.2.0.
 host_network: true
 
 # Hyperion's web UI listens on 8090. Home Assistant's ingress proxy connects
