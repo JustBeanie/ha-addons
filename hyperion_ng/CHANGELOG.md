@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.2.6
+
+- Install the explicit `libglib2.0-0` runtime dependency required by
+  Hyperion's bundled Qt libraries.
+
 ## 2.2.5
 
 - Install the explicit `libfontconfig1` runtime dependency required by
