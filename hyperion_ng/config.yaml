@@ -1,6 +1,6 @@
 name: "Hyperion.NG"
 slug: "hyperion_ng"
-description: "Runs Hyperion.NG using sirfragalot/hyperion.ng (host network, no ingress)."
+description: "Runs Hyperion.NG using sirfragalot/hyperion.ng with Home Assistant ingress support."
 version: "2.2.0"
 url: "https://hub.docker.com/r/sirfragalot/hyperion.ng"
 
@@ -11,6 +11,16 @@ arch:
 
 image: "sirfragalot/hyperion.ng"
 host_network: true
+
+# Hyperion's web UI listens on 8090. Home Assistant's ingress proxy connects
+# to this port while host networking keeps the LED/network protocols available
+# on the host for clients and hardware.
+ingress: true
+ingress_port: 8090
+ingress_entry: /
+panel_icon: "mdi:television-ambient-light"
+panel_title: "Hyperion.NG"
+webui: "http://[HOST]:[PORT:8090]/"
 
 environment:
   QT_QPA_PLATFORM: offscreen
