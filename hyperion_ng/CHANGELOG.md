@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.2.7
+
+- Install the complete set of Debian Bookworm runtime providers required by
+  Hyperion's bundled Qt and Python extension libraries.
+- Add an architecture-matched CI startup smoke test so a build must launch
+  Hyperion and serve its HTTP UI.
+
 ## 2.2.6
 
 - Install the explicit `libglib2.0-0` runtime dependency required by

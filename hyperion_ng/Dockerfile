@@ -27,7 +27,26 @@ RUN set -euo pipefail; \
         *) echo "Unsupported Home Assistant architecture: ${BUILD_ARCH}" >&2; exit 1 ;; \
     esac; \
     apt-get update; \
-    apt-get install -y --no-install-recommends ca-certificates curl libexpat1 libfontconfig1 libglib2.0-0; \
+    apt-get install -y --no-install-recommends \
+        ca-certificates \
+        curl \
+        libbz2-1.0 \
+        libcec6 \
+        libcrypt1 \
+        libdb5.3 \
+        libexpat1 \
+        libfontconfig1 \
+        libglib2.0-0 \
+        liblzma5 \
+        libncursesw6 \
+        libnsl2 \
+        libreadline8 \
+        libsystemd0 \
+        libtinfo6 \
+        libtirpc3 \
+        libudev1 \
+        libuuid1 \
+        zlib1g; \
     package="/tmp/hyperion.deb"; \
     curl -fsSL -o "${package}" \
         "https://github.com/hyperion-project/hyperion.ng/releases/download/${HYPERION_VERSION}/Hyperion-${HYPERION_VERSION}-Linux-${HYPERION_ARCH}.deb"; \

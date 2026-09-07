@@ -83,7 +83,56 @@ jobs:
           context: ./hyperion_ng
           platforms: linux/${{ matrix.platform }}
           push: false
+          load: true
           tags: local/hyperion-ng:${{ matrix.arch }}
           build-args: |
             BUILD_ARCH=${{ matrix.arch }}
             BUILD_VERSION=${{ steps.metadata.outputs.version }}
+      - name: Smoke-test Hyperion startup
+        timeout-minutes: 3
+        shell: bash
+        env:
+          IMAGE: local/hyperion-ng:${{ matrix.arch }}
+        run: |
+          set -euo pipefail
+          name=hyperion-smoke
+
+          cleanup() {
+            docker logs "${name}" || true
+            docker rm -f "${name}" >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+
+          docker run --detach --name "${name}" \
+            --env QT_QPA_PLATFORM=offscreen \
+            --env XDG_RUNTIME_DIR=/run \
+            --mount type=tmpfs,destination=/data \
+            --mount type=tmpfs,destination=/root/.hyperion \
+            --health-interval=2s \
+            --health-timeout=3s \
+            --health-start-period=10s \
+            --health-retries=5 \
+            "${IMAGE}"
+
+          consecutive=0
+          for attempt in $(seq 1 45); do
+            running="$(docker inspect -f '{{.State.Running}}' "${name}")"
+            health="$(docker inspect -f '{{.State.Health.Status}}' "${name}")"
+            test "${running}" = true
+            test "${health}" != unhealthy
+
+            if [ "${health}" = healthy ]; then
+              consecutive=$((consecutive + 1))
+              if [ "${consecutive}" -ge 3 ]; then
+                docker exec "${name}" curl --max-time 5 -fsS \
+                  http://127.0.0.1:8090/
+                exit 0
+              fi
+            else
+              consecutive=0
+            fi
+            sleep 2
+          done
+
+          echo "Hyperion did not become healthy" >&2
+          exit 1
