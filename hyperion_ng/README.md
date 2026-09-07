@@ -15,6 +15,14 @@ Home Assistant's ingress proxy terminates HTTPS for the sidebar UI. The add-on a
 
 Set these paths in Hyperion.NG's Web Configuration settings (`Certificate path` and `Private key path`) and enable its HTTPS port if native Hyperion HTTPS is required. The files are supplied by Home Assistant's certificate management and are refreshed in place.
 
+Hyperion's native HTTPS listener requires an RSA PEM private key. The current Home Assistant Let's Encrypt/Certbot app can create ECDSA keys by default, which produces the `The provided SSL key is invalid or not supported` error. Set the Certbot app option below, renew the certificate, and then restart this add-on:
+
+```yaml
+key_type: rsa
+```
+
+If the certificate is not due for renewal, temporarily enable `force_renew: true` in the Certbot app, start it once, and then disable `force_renew` again. Home Assistant ingress does not require Hyperion's native HTTPS listener and is unaffected by this RSA requirement.
+
 ### Prerequisites
 - A certificate must exist in Home Assistant's `/ssl` directory when native Hyperion HTTPS is enabled.
 
