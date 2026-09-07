@@ -1,0 +1,95 @@
+name: Hyperion.NG
+
+on:
+  pull_request:
+    paths:
+      - "hyperion_ng/**"
+      - ".hadolint.yaml"
+      - ".github/workflows/hyperion-ng.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "hyperion_ng/**"
+      - ".hadolint.yaml"
+      - ".github/workflows/hyperion-ng.yml"
+  schedule:
+    - cron: "29 4 * * 0"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hyperion-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: Static analysis
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # v2.21 predates Supervisor's 2026.07 app_config rename. Keep the
+      # manifest on the current format while linting a compatibility copy.
+      - name: Prepare linter compatibility copy
+        run: |
+          mkdir -p .lint
+          cp -a hyperion_ng .lint/hyperion_ng
+          sed -i 's/type: app_config/type: addon_config/' .lint/hyperion_ng/config.yaml
+      - name: Lint Home Assistant app manifest
+        uses: frenck/action-addon-linter@b9cfd1bc62ba60d2c4fc96317b5f7ada5923f4a7 # v2.21.1
+        with:
+          path: "./.lint/hyperion_ng"
+      - name: Lint Dockerfile
+        uses: hadolint/hadolint-action@06be81baf89a55ffd0e24b8f04a4185738dd3387 # v3.5.0
+        with:
+          dockerfile: hyperion_ng/Dockerfile
+          config: .hadolint.yaml
+
+  build:
+    name: Build ${{ matrix.arch }} app image
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            platform: amd64
+            runner: ubuntu-24.04
+          - arch: aarch64
+            platform: arm64
+            runner: ubuntu-24.04-arm
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
+      - name: Read app build metadata
+        id: metadata
+        shell: bash
+        env:
+          APP_ARCH: ${{ matrix.arch }}
+        run: |
+          version="$(sed -n 's/^version: "\(.*\)"/\1/p' hyperion_ng/config.yaml)"
+          base="$(awk -v arch="${APP_ARCH}:" '$1 == arch { gsub(/"/, "", $2); print $2 }' hyperion_ng/build.yaml)"
+          test -n "${version}"
+          test -n "${base}"
+          echo "version=${version}" >> "${GITHUB_OUTPUT}"
+          echo "base=${base}" >> "${GITHUB_OUTPUT}"
+      - name: Build app image
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        with:
+          context: ./hyperion_ng
+          platforms: linux/${{ matrix.platform }}
+          push: false
+          tags: local/hyperion-ng:${{ matrix.arch }}
+          build-args: |
+            BUILD_FROM=${{ steps.metadata.outputs.base }}
+            BUILD_ARCH=${{ matrix.arch }}
+            BUILD_VERSION=${{ steps.metadata.outputs.version }}
