@@ -1,5 +1,10 @@
 # Changelog
 
+## 3.0.4
+
+- Restore the `app_config` storage mapping so Hyperion configuration survives
+  app restarts and is included in Home Assistant backups.
+
 ## 3.0.3
 
 - Avoid a double slash in Home Assistant ingress URLs so the web UI assets
