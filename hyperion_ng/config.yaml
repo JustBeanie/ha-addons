@@ -1,7 +1,7 @@
 name: "Hyperion.NG"
 slug: "hyperion_ng"
 description: "Runs Hyperion.NG from the official release package with Home Assistant ingress support."
-version: "2.2.7"
+version: "2.2.8"
 url: "https://github.com/JustBeanie/ha-addons/tree/main/hyperion_ng"
 
 arch:
@@ -48,7 +48,10 @@ ports_description:
   19445/tcp: "Hyperion Proto Server"
 
 map:
-  - type: app_config
+  # Keep the existing Hyperion database in the app's public, backed-up config
+  # directory. This preserves configurations created by the previous image,
+  # which also used addon_config.
+  - type: addon_config
     read_only: false
     path: /root/.hyperion
   - type: ssl

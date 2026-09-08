@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.2.8
+
+- Restore the existing `addon_config` mapping so the app reuses the prior
+  Hyperion database and configuration.
+- Make the official Hyperion web client use ingress-relative API, content, and
+  WebSocket URLs when served through Home Assistant.
+
 ## 2.2.7
 
 - Install the complete set of Debian Bookworm runtime providers required by

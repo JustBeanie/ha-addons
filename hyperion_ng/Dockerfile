@@ -52,6 +52,19 @@ RUN set -euo pipefail; \
         "https://github.com/hyperion-project/hyperion.ng/releases/download/${HYPERION_VERSION}/Hyperion-${HYPERION_VERSION}-Linux-${HYPERION_ARCH}.deb"; \
     echo "${HYPERION_SHA256}  ${package}" | sha256sum -c -; \
     apt-get install -y --no-install-recommends "${package}"; \
+    web_root="$(dirname "$(find / -type f -path '*/webconfig/js/hyperion.js' -print -quit)")"; \
+    test -n "${web_root}" -a -f "${web_root}/hyperion.js"; \
+    sed -i -z -E \
+        -e 's#\$\.get("/cgi/cfg_jsonserver"#\$\.get("./cgi/cfg_jsonserver"#' \
+        -e 's#globalThis\.websocket =\s*(document\.location\.protocol == "https:")\s*\?\s*new WebSocket\([^;]+\)\s*:\s*new WebSocket\([^;]+\);#globalThis.websocket = new WebSocket(new URL(".", document.location.href).toString().replace(/^http/, "ws"));#' \
+        "${web_root}/hyperion.js"; \
+    sed -i \
+        -e 's#\.load("/content/#.load("./content/#g' \
+        "${web_root}/../js/ui_utils.js"; \
+    sed -i \
+        -e "s#location.replace('/')#location.replace('./')#" \
+        "${web_root}/../js/settings.js"; \
+    find "${web_root}/.." -type f -name '*.html' -exec sed -i -E 's#(href|src)="/#\1="./#g' {} +; \
     rm -f "${package}"; \
     apt-get clean; \
     rm -rf /var/lib/apt/lists/*
