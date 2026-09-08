@@ -5,7 +5,9 @@ ARG HYPERION_VERSION=2.2.1
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
 RUN apt-get update; \
-    apt-get install -y --no-install-recommends ca-certificates git; \
+    apt-get install -y --no-install-recommends \
+        build-essential ca-certificates cmake dpkg-dev git ninja-build \
+        pkg-config; \
     rm -rf /var/lib/apt/lists/*
 
 WORKDIR /src
