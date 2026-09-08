@@ -66,11 +66,10 @@ function silently breaks about eighty-five anchors at once.
 
 Ranked by how likely they are to arrive **without anyone choosing them**:
 
-1. **PyPI availability at install time.** There is no `image:` key in
-   `config.yaml` — deliberately, so the Supervisor builds this image locally
-   on every install. A fresh install on a new box needs mkdocs 1.6.1, mkdocs-material
-   9.7.7 and pymdown-extensions 11.0.1 all still served by PyPI. This is the
-   one that turns a working add-on into an uninstallable one.
+1. **PyPI availability at release time.** The published image is built in CI,
+   so users do not need PyPI access or local build tooling when installing the
+   app. The weekly clean build still catches dependency and base-image decay
+   before a release is published.
 2. **The Alpine base ageing out.** `build.yaml` pins the architecture-specific
    images to Home Assistant's `3.24-2026.08.0` base release. Python and Alpine
    cannot drift under that pin without someone editing the file, but the pin

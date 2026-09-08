@@ -21,5 +21,6 @@ python -m unittest discover -s tests -v
 ```
 
 The workflow also validates the app manifest, Dockerfile, shell script, and
-both supported container architectures. A clean build runs weekly so pinned
-Home Assistant base images and Python dependencies do not silently rot.
+both supported container architectures. Merges to `main` publish a signed
+multi-architecture image to GHCR; a clean build runs weekly so pinned Home
+Assistant base images and Python dependencies do not silently rot.

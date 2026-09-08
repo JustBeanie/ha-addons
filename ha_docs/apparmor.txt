@@ -1,0 +1,40 @@
+#include <tunables/global>
+
+profile ha_docs flags=(attach_disconnected,mediate_deleted) {
+  #include <abstractions/base>
+
+  network inet stream,
+  network inet6 stream,
+  network inet dgram,
+  network inet6 dgram,
+  network unix stream,
+
+  signal (send) set=(kill,term,int,hup,cont),
+  signal (receive),
+
+  # S6 Overlay and Bashio supplied by the Home Assistant base image.
+  /init ix,
+  /bin/** ix,
+  /usr/bin/** ix,
+  /run/{s6,s6-rc*,service}/** ix,
+  /package/** ix,
+  /command/** ix,
+  /etc/services.d/** rwix,
+  /etc/cont-init.d/** rwix,
+  /etc/cont-finish.d/** rwix,
+  /run/{,**} rwk,
+  /usr/lib/bashio/** ix,
+
+  # The app bundle is immutable at runtime; generated content stays in /data.
+  /opt/ha_docs/** r,
+  /opt/ha_docs/**.py ix,
+  /etc/nginx/** r,
+  /var/lib/nginx/** rw,
+  /var/log/nginx/** rw,
+
+  # Persistent clone, generated site, annotations, and scan state.
+  /data/ rw,
+  /data/** rwk,
+  /tmp/ rw,
+  /tmp/** rwk,
+}

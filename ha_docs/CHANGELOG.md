@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.16.0 - 2026-09-07
+
+- Publish signed multi-architecture images to GHCR through GitHub Actions so
+  installations do not build the app locally.
+- Restrict the web server to Home Assistant ingress and loopback clients.
+- Add a custom AppArmor profile for the app runtime.
+
 ## 1.15.3 - 2026-09-05
 
 - Kept the custom sidebar controls desktop-only, so mobile has one clear
