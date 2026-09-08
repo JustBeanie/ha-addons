@@ -15,24 +15,25 @@ WORKDIR /src
 # Build from the upstream release tag so the embedded web client can be made
 # ingress-aware before Hyperion's Qt resource bundle is compiled.
 RUN git clone --depth 1 --branch "${HYPERION_VERSION}" --recursive \
-    https://github.com/hyperion-project/hyperion.ng.git
+    https://github.com/hyperion-project/hyperion.ng.git hyperion-src
 
-WORKDIR /src/hyperion/build
+WORKDIR /src/hyperion-src/build
 
-RUN find /src/hyperion -type f -name hyperion.js -exec sed -i \
+RUN test -f /src/hyperion-src/CMakeLists.txt; \
+    find /src/hyperion-src -type f -name hyperion.js -exec sed -i \
         -e 's#\$\.get("/cgi/cfg_jsonserver"#\$\.get("./cgi/cfg_jsonserver"#' {} +; \
-    find /src/hyperion -type f -name hyperion.js -exec sed -i -z -E \
+    find /src/hyperion-src -type f -name hyperion.js -exec sed -i -z -E \
         -e 's#globalThis\.websocket =\s*(document\.location\.protocol == "https:")\s*\?\s*new WebSocket\([^;]+\)\s*:\s*new WebSocket\([^;]+\);#globalThis.websocket = new WebSocket(new URL(".", document.location.href).toString().replace(/^http/, "ws"));#' \
         {} +; \
-    find /src/hyperion -type f -name ui_utils.js -exec sed -i \
+    find /src/hyperion-src -type f -name ui_utils.js -exec sed -i \
         -e 's#\.load("/content/#.load("./content/#g' \
         {} +; \
-    find /src/hyperion -type f -name settings.js -exec sed -i \
+    find /src/hyperion-src -type f -name settings.js -exec sed -i \
         -e "s#location.replace('/')#location.replace('./')#" \
         {} +; \
-    find /src/hyperion -type f -path '*/assets/webconfig/*.html' \
+    find /src/hyperion-src -type f -path '*/assets/webconfig/*.html' \
         -exec sed -i -E 's#(href|src)="/#\1="./#g' {} +; \
-    cmake -G Ninja -DCMAKE_BUILD_TYPE=Release ..; \
+    cmake -G Ninja -DCMAKE_BUILD_TYPE=Release /src/hyperion-src; \
     cmake --build . --target package -- -j"$(nproc)"
 
 FROM ghcr.io/home-assistant/base-debian:bookworm
@@ -57,7 +58,7 @@ RUN set -euo pipefail; \
     apt-get clean; \
     rm -rf /var/lib/apt/lists/*
 
-COPY --from=hyperion-builder /src/hyperion/build/Hyperion-*.deb /tmp/
+COPY --from=hyperion-builder /src/hyperion-src/build/Hyperion-*.deb /tmp/
 
 RUN set -euo pipefail; \
     apt-get update; \
