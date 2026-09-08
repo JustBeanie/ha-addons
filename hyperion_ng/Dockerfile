@@ -57,7 +57,7 @@ RUN set -euo pipefail; \
         ca-certificates curl libbz2-1.0 libcec6 libcrypt1 libdb5.3 \
         libexpat1 libfontconfig1 libglib2.0-0 liblzma5 libncursesw6 \
         libnsl2 libreadline8 libsystemd0 libtinfo6 libtirpc3 libudev1 \
-        libuuid1 zlib1g; \
+        libuuid1 shared-mime-info zlib1g; \
     apt-get clean; \
     rm -rf /var/lib/apt/lists/*
 

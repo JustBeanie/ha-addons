@@ -166,6 +166,14 @@ jobs:
               if [ "${consecutive}" -ge 3 ]; then
                 docker exec "${name}" curl --max-time 5 -fsS \
                   http://127.0.0.1:8090/
+                html_type="$(docker exec "${name}" curl --max-time 5 -fsS \
+                  -D - -o /dev/null http://127.0.0.1:8090/ | \
+                  tr -d '\\r' | awk -F': ' 'tolower($1)=="content-type"{print tolower($2)}')"
+                js_type="$(docker exec "${name}" curl --max-time 5 -fsS \
+                  -D - -o /dev/null http://127.0.0.1:8090/js/hyperion.js | \
+                  tr -d '\\r' | awk -F': ' 'tolower($1)=="content-type"{print tolower($2)}')"
+                grep -q 'text/html' <<<"${html_type}"
+                grep -Eq 'javascript|ecmascript' <<<"${js_type}"
                 exit 0
               fi
             else

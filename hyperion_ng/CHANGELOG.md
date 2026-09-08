@@ -1,5 +1,10 @@
 # Changelog
 
+## 3.0.2
+
+- Include Debian's shared MIME database so the Hyperion web UI and JavaScript
+  assets have valid content types through Home Assistant ingress.
+
 ## 3.0.1
 
 - Use Home Assistant ingress for the app's Open Web UI action instead of
