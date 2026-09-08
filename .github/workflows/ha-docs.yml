@@ -157,6 +157,12 @@ jobs:
           mkdir -p "${data_dir}"
           cp ha_docs/tests/smoke-options.json "${data_dir}/options.json"
 
+          # A custom AppArmor profile grants no capabilities at all, so the
+          # container's root has no CAP_DAC_OVERRIDE and cannot write into a
+          # directory owned by anyone else. Supervisor's /data is root-owned, so
+          # match that rather than relaxing the profile for the test's benefit.
+          sudo chown -R 0:0 "${data_dir}"
+
           docker run --detach --name "${name}" \
             --security-opt apparmor=ha_docs \
             --mount type=bind,source="${data_dir}",destination=/data \
