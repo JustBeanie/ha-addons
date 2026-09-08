@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.16.1 - 2026-09-07
+
+- Fixed the 1.16.0 AppArmor profile denying the container's own init, which left
+  the app in a restart loop logging
+  `/bin/sh: can't open '/init': Permission denied`. The profile was missing the
+  base `file,` grant, so `/init ix` allowed the entry point to be executed but
+  not read. Supervisor loads the profile from the app store checkout rather than
+  from the installed image, so rolling back or restoring a backup did not clear
+  it.
+- Added the `network unix dgram,` rule, for parity with the BACnet MQTT Gateway
+  profile this one is modelled on.
+
 ## 1.16.0 - 2026-09-07
 
 - Publish signed multi-architecture images to GHCR through GitHub Actions so

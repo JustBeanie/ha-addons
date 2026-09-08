@@ -3,11 +3,16 @@
 profile ha_docs flags=(attach_disconnected,mediate_deleted) {
   #include <abstractions/base>
 
+  # The container mount namespace limits the visible filesystem to the app,
+  # its private configuration, and its persistent data volume.
+  file,
+
   network inet stream,
   network inet6 stream,
   network inet dgram,
   network inet6 dgram,
   network unix stream,
+  network unix dgram,
 
   signal (send) set=(kill,term,int,hup,cont),
   signal (receive),
