@@ -33,9 +33,15 @@ RUN set -euo pipefail; \
     find /src/hyperion-src -type f -name settings.js -exec sed -i \
         -e "s#location.replace('/')#location.replace('./')#" \
         {} +; \
+    find /src/hyperion-src -type f -name content_index.js -exec sed -i \
+        -e 's#const val = event.response.info;#let val = event.response.info;#' \
+        -e '/const info = event.response.info\[0\]/a\      val = info' \
+        -e 's#info.comment#val.comment#' \
+        {} +; \
     find /src/hyperion-src -type f -path '*/assets/webconfig/*.html' \
         -exec sed -i -E 's#(href|src)="/#\1="./#g' {} +; \
     grep -R -q 'new WebSocket(new URL(".", document.location.href)' /src/hyperion-src/assets/webconfig; \
+    grep -R -q 'val = info' /src/hyperion-src/assets/webconfig; \
     cmake -G Ninja -DCMAKE_BUILD_TYPE=Release /src/hyperion-src; \
     cmake --build . --target package -- -j"$(nproc)"
 

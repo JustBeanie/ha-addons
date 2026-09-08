@@ -1,5 +1,10 @@
 # Changelog
 
+## 3.0.6
+
+- Fix the token-request approval dialog so Home Assistant's requested token
+  displays and approves the actual application ID instead of `undefined`.
+
 ## 3.0.5
 
 - Start Hyperion with an explicit `/config` user-data directory so its
