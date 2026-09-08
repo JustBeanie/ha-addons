@@ -11,11 +11,15 @@
   it.
 - Added the `network unix dgram,` rule, for parity with the BACnet MQTT Gateway
   profile this one is modelled on.
+- Granted `capability setgid` and `capability setuid`, without which nginx died
+  with `setgid(101) failed (1: Operation not permitted)` and served nothing. A
+  custom profile grants no capabilities at all, and nginx.conf sets no `user`
+  directive, so nginx drops worker privileges to its compile-time default user.
+- Defaulted `poll_interval` when the Supervisor API cannot be reached. An empty
+  value made the refresh worker's interval sleep a hot loop instead of a wait.
 - CI now starts the built image under the loaded profile on both architectures
-  and waits for `/anno/health`, which is the check that would have caught the
-  above. It runs with the same `/data/options.json` Supervisor writes; without
-  one, `poll_interval` is not an integer and the refresh worker spins instead of
-  sleeping.
+  and waits for `/anno/health`. Nothing in CI had ever started this app; both
+  runtime faults above were found by the first two runs of that check.
 
 ## 1.16.0 - 2026-09-07
 

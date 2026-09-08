@@ -17,6 +17,13 @@ profile ha_docs flags=(attach_disconnected,mediate_deleted) {
   signal (send) set=(kill,term,int,hup,cont),
   signal (receive),
 
+  # A custom profile grants no capabilities at all. nginx.conf sets no `user`
+  # directive, so nginx keeps its compile-time default and drops worker
+  # privileges to the nginx user; without these it dies with
+  # `setgid(101) failed (1: Operation not permitted)` and serves nothing.
+  capability setgid,
+  capability setuid,
+
   # S6 Overlay and Bashio supplied by the Home Assistant base image.
   /init ix,
   /bin/** ix,

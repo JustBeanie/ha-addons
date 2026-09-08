@@ -5,6 +5,10 @@ set -o nounset -o pipefail
 REPO=$(bashio::config 'repository')
 BRANCH=$(bashio::config 'branch')
 INTERVAL=$(bashio::config 'poll_interval')
+# Guard the arithmetic in wait_for_next_poll: an unreachable Supervisor API
+# hands back an empty string, which turns the refresh worker's sleep into a
+# hot loop rather than a wait. Mirrors the schema default.
+INTERVAL=${INTERVAL:-900}
 REPORT_DOC_LINK_REPAIRS=$(bashio::config 'report_doc_link_repairs')
 REPAIR_SCAN_ON_START=$(bashio::config 'repair_scan_on_start')
 REPAIR_SCAN_CONCURRENCY=$(bashio::config 'repair_scan_concurrency')

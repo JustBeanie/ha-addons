@@ -146,26 +146,18 @@ jobs:
           }
           trap cleanup EXIT
 
-          # Supervisor always writes /data/options.json, so a run without one is
-          # an environment this app never ships into: bashio hands back empty
-          # strings, poll_interval stops being an integer, and the refresh
-          # worker hot-loops instead of sleeping. Supply the same file
-          # Supervisor would, pointed at this public repo so the clone, the
-          # anchor check, and the mkdocs build all really run.
-          data_dir="${RUNNER_TEMP}/ha-docs-smoke-data"
-          rm -rf "${data_dir}"
-          mkdir -p "${data_dir}"
-          cp ha_docs/tests/smoke-options.json "${data_dir}/options.json"
-
-          # A custom AppArmor profile grants no capabilities at all, so the
-          # container's root has no CAP_DAC_OVERRIDE and cannot write into a
-          # directory owned by anyone else. Supervisor's /data is root-owned, so
-          # match that rather than relaxing the profile for the test's benefit.
-          sudo chown -R 0:0 "${data_dir}"
+          # The app cannot be configured here: bashio::config reads the
+          # Supervisor API, not /data/options.json, so every option comes back
+          # empty and the repo is never cloned. That is fine - this test asks
+          # whether the container starts and serves under its own profile, which
+          # is what nothing in CI was asking. A tmpfs /data is root-owned, which
+          # matters because a custom AppArmor profile grants no capabilities, so
+          # the container's root has no CAP_DAC_OVERRIDE to write anyone else's
+          # directory.
 
           docker run --detach --name "${name}" \
             --security-opt apparmor=ha_docs \
-            --mount type=bind,source="${data_dir}",destination=/data \
+            --mount type=tmpfs,destination=/data \
             --health-interval=2s \
             --health-timeout=3s \
             --health-start-period=10s \
