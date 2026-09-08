@@ -127,7 +127,7 @@ jobs:
           load: ${{ github.event_name == 'pull_request' }}
           version: ${{ needs.prepare.outputs.version }}
       - name: Smoke-test Hyperion startup
-        if: github.event_name == 'pull_request'
+        if: github.event_name == 'pull_request' || (github.event_name != 'pull_request' && github.ref == 'refs/heads/main')
         timeout-minutes: 3
         shell: bash
         env:
@@ -141,6 +141,10 @@ jobs:
             docker rm -f "${name}" >/dev/null 2>&1 || true
           }
           trap cleanup EXIT
+
+          if [ "${{ github.event_name }}" != "pull_request" ]; then
+            docker pull "${IMAGE}"
+          fi
 
           docker run --detach --name "${name}" \
             --entrypoint hyperiond \

@@ -1,5 +1,10 @@
 # Changelog
 
+## 3.0.3
+
+- Avoid a double slash in Home Assistant ingress URLs so the web UI assets
+  load correctly inside the app iframe.
+
 ## 3.0.2
 
 - Include Debian's shared MIME database so the Hyperion web UI and JavaScript
