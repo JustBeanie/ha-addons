@@ -31,10 +31,20 @@ jobs:
         uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
+      - name: Prepare linter compatibility copy
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .lint
+          cp -a hyperion_ng .lint/hyperion_ng
+          # The pinned linter predates the current Supervisor schema's
+          # breaking_versions key; keep the production manifest unchanged.
+          sed -i '/^breaking_versions:/,/^environment:/ { /^environment:/!d; }' \
+            .lint/hyperion_ng/config.yaml
       - name: Lint Home Assistant app manifest
         uses: frenck/action-addon-linter@v2.21.1
         with:
-          path: ./hyperion_ng
+          path: ./.lint/hyperion_ng
       - name: Lint Dockerfile
         uses: hadolint/hadolint-action@v3.5.0
         with:
