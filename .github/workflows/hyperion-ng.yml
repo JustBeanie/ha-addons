@@ -41,6 +41,8 @@ jobs:
           # breaking_versions key; keep the production manifest unchanged.
           sed -i '/^breaking_versions:/,/^environment:/ { /^environment:/!d; }' \
             .lint/hyperion_ng/config.yaml
+          # The same pinned linter also predates the webui metadata key.
+          sed -i '/^webui:/d' .lint/hyperion_ng/config.yaml
       - name: Lint Home Assistant app manifest
         uses: frenck/action-addon-linter@v2.21.1
         with:
