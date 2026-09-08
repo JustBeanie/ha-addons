@@ -1,7 +1,7 @@
 name: "Hyperion.NG"
 slug: "hyperion_ng"
 description: "Runs Hyperion.NG with Home Assistant ingress support."
-version: "3.0.0"
+version: "3.0.1"
 url: "https://github.com/JustBeanie/ha-addons/tree/main/hyperion_ng"
 image: "ghcr.io/justbeanie/hyperion-ng"
 
@@ -20,7 +20,6 @@ backup: cold
 ingress: true
 ingress_port: 8090
 ingress_entry: /
-webui: "http://[HOST]:[PORT:8090]/"
 panel_icon: "mdi:television-ambient-light"
 panel_title: "Hyperion.NG"
 

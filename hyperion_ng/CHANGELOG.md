@@ -1,5 +1,12 @@
 # Changelog
 
+## 3.0.1
+
+- Use Home Assistant ingress for the app's Open Web UI action instead of
+  directing the browser to Hyperion's direct host port. This avoids
+  Hyperion's non-local-network protection page when opened from Home
+  Assistant.
+
 ## 3.0.0
 
 - Publish a multi-architecture image so Home Assistant downloads the image
