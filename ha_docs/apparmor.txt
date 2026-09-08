@@ -3,14 +3,26 @@
 profile ha_docs flags=(attach_disconnected,mediate_deleted) {
   #include <abstractions/base>
 
+  # The container mount namespace limits the visible filesystem to the app,
+  # its private configuration, and its persistent data volume.
+  file,
+
   network inet stream,
   network inet6 stream,
   network inet dgram,
   network inet6 dgram,
   network unix stream,
+  network unix dgram,
 
   signal (send) set=(kill,term,int,hup,cont),
   signal (receive),
+
+  # A custom profile grants no capabilities at all. nginx.conf sets no `user`
+  # directive, so nginx keeps its compile-time default and drops worker
+  # privileges to the nginx user; without these it dies with
+  # `setgid(101) failed (1: Operation not permitted)` and serves nothing.
+  capability setgid,
+  capability setuid,
 
   # S6 Overlay and Bashio supplied by the Home Assistant base image.
   /init ix,

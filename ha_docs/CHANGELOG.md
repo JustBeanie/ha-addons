@@ -1,5 +1,41 @@
 # Changelog
 
+## 1.16.3 - 2026-09-07
+
+- Silenced the `could not open error log file ... /var/lib/nginx/logs/error.log
+  (13: Permission denied)` alert logged at every start. nginx opens its
+  compile-time default error log before it parses `nginx.conf`, so the
+  `error_log /dev/stderr` directive there is applied too late. Start nginx with
+  `-e stderr` instead of granting the profile `capability dac_override`.
+
+## 1.16.2 - 2026-09-07
+
+- Republished 1.16.1's AppArmor fixes under a new version. Supervisor loads
+  `apparmor.txt` only when an app is installed or updated, and 1.16.1 shipped
+  four times while the profile was still being repaired, so an install could
+  pick up a profile older than the one in the store. Nothing else changed.
+
+## 1.16.1 - 2026-09-07
+
+- Fixed the 1.16.0 AppArmor profile denying the container's own init, which left
+  the app in a restart loop logging
+  `/bin/sh: can't open '/init': Permission denied`. The profile was missing the
+  base `file,` grant, so `/init ix` allowed the entry point to be executed but
+  not read. Supervisor loads the profile from the app store checkout rather than
+  from the installed image, so rolling back or restoring a backup did not clear
+  it.
+- Added the `network unix dgram,` rule, for parity with the BACnet MQTT Gateway
+  profile this one is modelled on.
+- Granted `capability setgid` and `capability setuid`, without which nginx died
+  with `setgid(101) failed (1: Operation not permitted)` and served nothing. A
+  custom profile grants no capabilities at all, and nginx.conf sets no `user`
+  directive, so nginx drops worker privileges to its compile-time default user.
+- Defaulted `poll_interval` when the Supervisor API cannot be reached. An empty
+  value made the refresh worker's interval sleep a hot loop instead of a wait.
+- CI now starts the built image under the loaded profile on both architectures
+  and waits for `/anno/health`. Nothing in CI had ever started this app; both
+  runtime faults above were found by the first two runs of that check.
+
 ## 1.16.0 - 2026-09-07
 
 - Publish signed multi-architecture images to GHCR through GitHub Actions so

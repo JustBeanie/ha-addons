@@ -5,6 +5,10 @@ set -o nounset -o pipefail
 REPO=$(bashio::config 'repository')
 BRANCH=$(bashio::config 'branch')
 INTERVAL=$(bashio::config 'poll_interval')
+# Guard the arithmetic in wait_for_next_poll: an unreachable Supervisor API
+# hands back an empty string, which turns the refresh worker's sleep into a
+# hot loop rather than a wait. Mirrors the schema default.
+INTERVAL=${INTERVAL:-900}
 REPORT_DOC_LINK_REPAIRS=$(bashio::config 'report_doc_link_repairs')
 REPAIR_SCAN_ON_START=$(bashio::config 'repair_scan_on_start')
 REPAIR_SCAN_CONCURRENCY=$(bashio::config 'repair_scan_concurrency')
@@ -352,7 +356,14 @@ python3 /opt/ha_docs/annotations.py &
 readonly ANNO_PID=$!
 
 log_info "Starting nginx on port 8099"
-nginx &
+# -e is what silences `could not open error log file
+# /var/lib/nginx/logs/error.log (13: Permission denied)`. nginx opens its
+# compile-time default error log BEFORE it parses nginx.conf, so the
+# `error_log /dev/stderr` directive in there is applied too late; that path is
+# owned by the nginx user, and a custom AppArmor profile grants no capabilities,
+# so root has no CAP_DAC_OVERRIDE to write it. Overriding the log on the command
+# line is the fix that does not involve granting one.
+nginx -e stderr &
 readonly NGINX_PID=$!
 
 # Sleep out the poll interval in slices rather than in one go, so a sync asked

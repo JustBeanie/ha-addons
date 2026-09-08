@@ -67,6 +67,13 @@ jobs:
         with:
           dockerfile: ha_docs/Dockerfile
           config: .hadolint.yaml
+      - name: Check AppArmor profile syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apparmor_parser -Q ha_docs/apparmor.txt
+          sudo apparmor_parser -Q bacnet_mqtt_gateway/apparmor.txt
+
       - name: Lint shell scripts
         uses: ludeeus/action-shellcheck@00cae500b08a931fb5698e11e79bfbd38e612a38 # v2.0.0
         env:
@@ -117,6 +124,70 @@ jobs:
             BUILD_FROM=${{ steps.metadata.outputs.base }}
             BUILD_ARCH=${{ matrix.arch }}
             BUILD_VERSION=${{ steps.metadata.outputs.version }}
+          load: true
+      - name: Smoke test the app under its AppArmor profile
+        shell: bash
+        env:
+          IMAGE: local/ha-docs:${{ matrix.arch }}
+        run: |
+          set -euo pipefail
+
+          # Loading the profile is part of the test, not a nicety. The 1.16.0
+          # profile was syntactically valid and still denied the container's own
+          # init, which only a real confined run can show. Never soften this to
+          # a skip.
+          sudo apparmor_parser -r -W ha_docs/apparmor.txt
+
+          name="ha-docs-smoke-${{ matrix.arch }}"
+
+          cleanup() {
+            docker logs "${name}" || true
+            docker rm -f "${name}" >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+
+          # The app cannot be configured here: bashio::config reads the
+          # Supervisor API, not /data/options.json, so every option comes back
+          # empty and the repo is never cloned. That is fine - this test asks
+          # whether the container starts and serves under its own profile, which
+          # is what nothing in CI was asking. A tmpfs /data is root-owned, which
+          # matters because a custom AppArmor profile grants no capabilities, so
+          # the container's root has no CAP_DAC_OVERRIDE to write anyone else's
+          # directory.
+
+          docker run --detach --name "${name}" \
+            --security-opt apparmor=ha_docs \
+            --mount type=tmpfs,destination=/data \
+            --health-interval=2s \
+            --health-timeout=3s \
+            --health-start-period=10s \
+            --health-retries=5 \
+            "${IMAGE}"
+
+          consecutive=0
+          for attempt in $(seq 1 45); do
+            running="$(docker inspect -f '{{.State.Running}}' "${name}")"
+            health="$(docker inspect -f '{{.State.Health.Status}}' "${name}")"
+            test "${running}" = true
+            test "${health}" != unhealthy
+
+            if [ "${health}" = healthy ]; then
+              consecutive=$((consecutive + 1))
+              if [ "${consecutive}" -ge 3 ]; then
+                # Through nginx on the ingress port, so the allow/deny block is
+                # exercised from loopback as well.
+                docker exec "${name}" python3 -c \
+                  "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8099/anno/health', timeout=5)"
+                exit 0
+              fi
+            else
+              consecutive=0
+            fi
+            sleep 2
+          done
+
+          echo "HA Docs did not become healthy" >&2
+          exit 1
 
   prepare-publish:
     name: Prepare published image
