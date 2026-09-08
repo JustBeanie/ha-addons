@@ -131,6 +131,7 @@ jobs:
           trap cleanup EXIT
 
           docker run --detach --name "${name}" \
+            --entrypoint hyperiond \
             --env QT_QPA_PLATFORM=offscreen \
             --env XDG_RUNTIME_DIR=/run \
             --mount type=tmpfs,destination=/data \
