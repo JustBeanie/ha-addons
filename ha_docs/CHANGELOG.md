@@ -11,6 +11,11 @@
   it.
 - Added the `network unix dgram,` rule, for parity with the BACnet MQTT Gateway
   profile this one is modelled on.
+- CI now starts the built image under the loaded profile on both architectures
+  and waits for `/anno/health`, which is the check that would have caught the
+  above. It runs with the same `/data/options.json` Supervisor writes; without
+  one, `poll_interval` is not an integer and the refresh worker spins instead of
+  sleeping.
 
 ## 1.16.0 - 2026-09-07
 

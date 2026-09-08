@@ -146,13 +146,20 @@ jobs:
           }
           trap cleanup EXIT
 
-          # No repository option, so run.sh cannot clone and serves the
-          # placeholder site. That is the app's designed degradation and
-          # /anno/health still answers, which is what makes this a valid
-          # unauthenticated smoke test.
+          # Supervisor always writes /data/options.json, so a run without one is
+          # an environment this app never ships into: bashio hands back empty
+          # strings, poll_interval stops being an integer, and the refresh
+          # worker hot-loops instead of sleeping. Supply the same file
+          # Supervisor would, pointed at this public repo so the clone, the
+          # anchor check, and the mkdocs build all really run.
+          data_dir="${RUNNER_TEMP}/ha-docs-smoke-data"
+          rm -rf "${data_dir}"
+          mkdir -p "${data_dir}"
+          cp ha_docs/tests/smoke-options.json "${data_dir}/options.json"
+
           docker run --detach --name "${name}" \
             --security-opt apparmor=ha_docs \
-            --mount type=tmpfs,destination=/data \
+            --mount type=bind,source="${data_dir}",destination=/data \
             --health-interval=2s \
             --health-timeout=3s \
             --health-start-period=10s \
