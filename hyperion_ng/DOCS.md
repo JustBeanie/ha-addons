@@ -7,7 +7,8 @@ Hyperion's native LED and capture protocols remain reachable without host
 network access.
 
 Use the **Hyperion.NG** item in the Home Assistant sidebar for the ingress UI.
-Configuration is stored in `/root/.hyperion` and is included in cold backups.
+Configuration is stored in `/config` (Hyperion's user-data directory) and is
+included in cold backups.
 The app maps Home Assistant's persistent `app_config` directory to that
 path, so existing Hyperion settings are retained across app restarts and image
 updates.

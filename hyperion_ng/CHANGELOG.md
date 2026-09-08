@@ -1,5 +1,10 @@
 # Changelog
 
+## 3.0.5
+
+- Start Hyperion with an explicit `/config` user-data directory so its
+  database is written to the persistent app storage across restarts.
+
 ## 3.0.4
 
 - Restore the `app_config` storage mapping so Hyperion configuration survives

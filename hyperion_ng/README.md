@@ -40,7 +40,7 @@ If the certificate is not due for renewal, temporarily enable `force_renew: true
 
 ### Storage
 
-- **Hyperion Config**: `/root/.hyperion` - All Hyperion configuration and data files
+- **Hyperion Config**: `/config` - All Hyperion configuration and data files
 - **SSL Certs**: `/ssl/` - Home Assistant certificates (read-only)
 
 ## Hyperion.NG Documentation
@@ -56,5 +56,5 @@ If the certificate is not due for renewal, temporarily enable `force_renew: true
 - The add-on image is rebuilt by this repository when the pinned Hyperion release or app version changes
 - Version 3.0.0 uses explicit port mappings instead of the host network. Review custom Hyperion ports and discovery requirements when upgrading.
 - The Home Assistant ingress proxy connects to Hyperion's HTTP listener on port 8090
-- Configuration persists in the app storage at `/root/.hyperion`
+- Configuration persists in the app storage mounted at `/config`
 - Hyperion.NG will auto-start on Home Assistant startup

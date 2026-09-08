@@ -73,4 +73,4 @@ RUN set -euo pipefail; \
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
     CMD ["curl", "-fsS", "http://127.0.0.1:8090/"]
 
-CMD ["hyperiond"]
+CMD ["hyperiond", "--userdata", "/config"]

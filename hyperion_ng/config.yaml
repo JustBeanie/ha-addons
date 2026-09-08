@@ -1,7 +1,7 @@
 name: "Hyperion.NG"
 slug: "hyperion_ng"
 description: "Runs Hyperion.NG with Home Assistant ingress support."
-version: "3.0.4"
+version: "3.0.5"
 url: "https://github.com/JustBeanie/ha-addons/tree/main/hyperion_ng"
 image: "ghcr.io/justbeanie/hyperion-ng"
 
@@ -56,10 +56,10 @@ ports_description:
 
 map:
   # Keep Hyperion's database in the app's persistent, backed-up config
-  # directory. `app_config` is the Supervisor storage mapping for v3 apps.
+  # directory. The image starts Hyperion with --userdata /config.
   - type: app_config
     read_only: false
-    path: /root/.hyperion
+    path: /config
   - type: ssl
     read_only: true
     path: /ssl
