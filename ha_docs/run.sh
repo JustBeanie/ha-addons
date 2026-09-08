@@ -356,7 +356,14 @@ python3 /opt/ha_docs/annotations.py &
 readonly ANNO_PID=$!
 
 log_info "Starting nginx on port 8099"
-nginx &
+# -e is what silences `could not open error log file
+# /var/lib/nginx/logs/error.log (13: Permission denied)`. nginx opens its
+# compile-time default error log BEFORE it parses nginx.conf, so the
+# `error_log /dev/stderr` directive in there is applied too late; that path is
+# owned by the nginx user, and a custom AppArmor profile grants no capabilities,
+# so root has no CAP_DAC_OVERRIDE to write it. Overriding the log on the command
+# line is the fix that does not involve granting one.
+nginx -e stderr &
 readonly NGINX_PID=$!
 
 # Sleep out the poll interval in slices rather than in one go, so a sync asked

@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.16.3 - 2026-09-07
+
+- Silenced the `could not open error log file ... /var/lib/nginx/logs/error.log
+  (13: Permission denied)` alert logged at every start. nginx opens its
+  compile-time default error log before it parses `nginx.conf`, so the
+  `error_log /dev/stderr` directive there is applied too late. Start nginx with
+  `-e stderr` instead of granting the profile `capability dac_override`.
+
 ## 1.16.2 - 2026-09-07
 
 - Republished 1.16.1's AppArmor fixes under a new version. Supervisor loads
