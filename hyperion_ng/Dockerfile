@@ -4,7 +4,8 @@ ARG HYPERION_VERSION=2.2.1
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
-RUN apt-get update; \
+RUN set -euo pipefail; \
+    apt-get update; \
     apt-get install -y --no-install-recommends \
         build-essential ca-certificates cmake dpkg-dev git ninja-build \
         pkg-config; \
@@ -19,7 +20,8 @@ RUN git clone --depth 1 --branch "${HYPERION_VERSION}" --recursive \
 
 WORKDIR /src/hyperion-src/build
 
-RUN test -f /src/hyperion-src/CMakeLists.txt; \
+RUN set -euo pipefail; \
+    test -f /src/hyperion-src/CMakeLists.txt; \
     find /src/hyperion-src -type f -name hyperion.js -exec sed -i \
         -e 's#\$\.get("/cgi/cfg_jsonserver"#\$\.get("./cgi/cfg_jsonserver"#' {} +; \
     find /src/hyperion-src -type f -name hyperion.js -exec sed -i -z -E \
