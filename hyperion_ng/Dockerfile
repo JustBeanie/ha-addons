@@ -23,7 +23,7 @@ RUN test -f /src/hyperion-src/CMakeLists.txt; \
     find /src/hyperion-src -type f -name hyperion.js -exec sed -i \
         -e 's#\$\.get("/cgi/cfg_jsonserver"#\$\.get("./cgi/cfg_jsonserver"#' {} +; \
     find /src/hyperion-src -type f -name hyperion.js -exec sed -i -z -E \
-        -e 's#globalThis\.websocket =\s*(document\.location\.protocol == "https:")\s*\?\s*new WebSocket\([^;]+\)\s*:\s*new WebSocket\([^;]+\);#globalThis.websocket = new WebSocket(new URL(".", document.location.href).toString().replace(/^http/, "ws"));#' \
+        -e 's#globalThis\.websocket =\s*\((document\.location\.protocol == "https:")\)\s*\?\s*new WebSocket\([^;]+\)\s*:\s*new WebSocket\([^;]+\);#globalThis.websocket = new WebSocket(new URL(".", document.location.href).toString().replace(/^http/, "ws"));#' \
         {} +; \
     find /src/hyperion-src -type f -name ui_utils.js -exec sed -i \
         -e 's#\.load("/content/#.load("./content/#g' \
@@ -33,6 +33,7 @@ RUN test -f /src/hyperion-src/CMakeLists.txt; \
         {} +; \
     find /src/hyperion-src -type f -path '*/assets/webconfig/*.html' \
         -exec sed -i -E 's#(href|src)="/#\1="./#g' {} +; \
+    grep -R -q 'new WebSocket(new URL(".", document.location.href)' /src/hyperion-src/assets/webconfig; \
     cmake -G Ninja -DCMAKE_BUILD_TYPE=Release /src/hyperion-src; \
     cmake --build . --target package -- -j"$(nproc)"
 
