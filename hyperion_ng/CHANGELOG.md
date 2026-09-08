@@ -1,5 +1,15 @@
 # Changelog
 
+## 3.0.0
+
+- Publish a multi-architecture image so Home Assistant downloads the image
+  instead of compiling it locally during installation.
+- Keep ingress HTTP request bodies compatible with Hyperion's native parser;
+  WebSocket ingress remains supported without streamed request bodies.
+- Keep the existing Hyperion configuration under `/root/.hyperion`.
+- Replace host networking with explicit service ports and mark the release as
+  a breaking update so custom protocol/discovery ports can be reviewed.
+
 ## 2.2.8
 
 - Restore the existing `addon_config` mapping so the app reuses the prior

@@ -1,27 +1,33 @@
 name: "Hyperion.NG"
 slug: "hyperion_ng"
-description: "Runs Hyperion.NG from the official release package with Home Assistant ingress support."
-version: "2.2.8"
+description: "Runs Hyperion.NG with Home Assistant ingress support."
+version: "3.0.0"
 url: "https://github.com/JustBeanie/ha-addons/tree/main/hyperion_ng"
+image: "ghcr.io/justbeanie/hyperion-ng"
 
 arch:
   - amd64
   - aarch64
 
-# The app owns its image build and installs the official Hyperion release. This
-# keeps Hyperion updates independent of third-party container image rebuilds.
+# The app uses a signed, published multi-architecture image. Home Assistant
+# downloads updates instead of compiling Hyperion on the host.
 init: false
 backup: cold
-host_network: true
 
 # Hyperion's web UI listens on 8090. Home Assistant's ingress proxy connects
-# to this port while host networking keeps the LED/network protocols available
-# on the host for clients and hardware.
+# to this port; explicit port mappings keep native protocols available without
+# granting the container the host network namespace.
 ingress: true
 ingress_port: 8090
 ingress_entry: /
+webui: "http://[HOST]:[PORT:8090]/"
 panel_icon: "mdi:television-ambient-light"
 panel_title: "Hyperion.NG"
+
+# 3.0.0 changes networking from host mode to explicit mappings. Existing
+# installations should review any custom Hyperion protocol/discovery ports.
+breaking_versions:
+  - "3.0.0"
 
 environment:
   QT_QPA_PLATFORM: offscreen
@@ -34,18 +40,20 @@ devices:
   - /dev/mem
   - /dev/vcio
 
-# Expose UI + services (even with host networking, this documents the ports in HA)
+# Expose the UI and native Hyperion services through explicit mappings.
 ports:
   8090/tcp: 8090
   8092/tcp: 8092
   19444/tcp: 19444
   19445/tcp: 19445
+  19400/tcp: 19400
 
 ports_description:
   8090/tcp: "Hyperion Web UI"
   8092/tcp: "Hyperion Web UI (HTTPS)"
   19444/tcp: "Hyperion JSON Server"
   19445/tcp: "Hyperion Proto Server"
+  19400/tcp: "Hyperion FlatBuffers Server"
 
 map:
   # Keep the existing Hyperion database in the app's public, backed-up config

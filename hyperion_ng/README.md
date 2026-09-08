@@ -1,6 +1,6 @@
 # Hyperion.NG
 
-This add-on builds its own image from the Home Assistant Debian base and installs the official Hyperion.NG release package. Host networking keeps the native Hyperion ports available for LED clients and hardware integrations, while the web UI is available from the Home Assistant sidebar through ingress.
+This app publishes a signed multi-architecture image containing the official Hyperion.NG release with the ingress-compatible web client. Explicit port mappings keep the native Hyperion services available to clients, while the web UI is available from the Home Assistant sidebar through ingress.
 
 ## UI
 
@@ -36,6 +36,7 @@ If the certificate is not due for renewal, temporarily enable `force_renew: true
 | 8092/tcp | HTTPS | Hyperion Web UI (when native HTTPS is enabled) |
 | 19444/tcp | JSON | Hyperion JSON Server |
 | 19445/tcp | Proto | Hyperion Proto Server |
+| 19400/tcp | FlatBuffers | Hyperion FlatBuffers Server |
 
 ### Storage
 
@@ -53,7 +54,7 @@ If the certificate is not due for renewal, temporarily enable `force_renew: true
 ## Notes
 
 - The add-on image is rebuilt by this repository when the pinned Hyperion release or app version changes
-- The add-on runs with `host_network: true` for direct access to your network and hardware
+- Version 3.0.0 uses explicit port mappings instead of the host network. Review custom Hyperion ports and discovery requirements when upgrading.
 - The Home Assistant ingress proxy connects to Hyperion's HTTP listener on port 8090
 - Configuration persists in the addon storage at `/root/.hyperion`
 - Hyperion.NG will auto-start on Home Assistant startup
