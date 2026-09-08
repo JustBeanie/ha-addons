@@ -13,6 +13,9 @@ The app provides:
 - Persistent runtime state in the app data volume and device configuration in
   the app-specific configuration directory.
 
+The web console is authenticated by Home Assistant ingress. The application
+does not define a second password or expose a public login endpoint.
+
 BACnet broadcast traffic requires host networking. The web console itself only
 accepts Home Assistant ingress traffic.
 

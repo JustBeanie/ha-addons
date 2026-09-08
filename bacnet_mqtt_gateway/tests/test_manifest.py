@@ -83,6 +83,23 @@ class AppManifestTests(unittest.TestCase):
         # the release workflow in the source repository can actually publish.
         self.assertRegex(self.manifest["version"], r"^\d+\.\d+\.\d+$")
 
+    def test_presentation_assets_are_store_compatible(self):
+        for name, dimensions in (("icon.png", (128, 128)), ("logo.png", (250, 100))):
+            path = APP_ROOT / name
+            self.assertTrue(path.is_file(), f"missing presentation asset: {name}")
+            data = path.read_bytes()
+            self.assertEqual(data[:8], b"\x89PNG\r\n\x1a\n")
+            width = int.from_bytes(data[16:20], "big")
+            height = int.from_bytes(data[20:24], "big")
+            self.assertEqual((width, height), dimensions)
+
+    def test_security_contract_is_explicit(self):
+        self.assertNotIn("privileged", self.manifest)
+        self.assertNotIn("docker_api", self.manifest)
+        self.assertNotIn("full_access", self.manifest)
+        self.assertTrue((APP_ROOT / "apparmor.txt").is_file())
+        self.assertIn("X-Remote-User-Id", (APP_ROOT / "DOCS.md").read_text(encoding="utf-8"))
+
 
 if __name__ == "__main__":
     unittest.main()

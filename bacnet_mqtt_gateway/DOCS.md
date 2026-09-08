@@ -149,12 +149,17 @@ records from the old namespace if you intentionally rename a deployed gateway.
 The console listens internally on TCP port `18082`, but it rejects application
 requests that do not originate from the Home Assistant ingress proxy
 (`172.30.32.2`). Health checks from loopback are also accepted. The sidebar panel
-is administrator-only and the gateway uses the authenticated ingress user.
+is administrator-only. For authenticated requests, Home Assistant supplies
+`X-Remote-User-Id`, `X-Remote-User-Name`, and `X-Remote-User-Display-Name`; the
+gateway uses those headers for the current user and does not maintain a second
+password database.
 
 Host networking is unavoidable for the required BACnet broadcast behavior. The
 app otherwise runs with Supervisor protection enabled, no privileged
 capabilities, no Home Assistant or Docker API access, and a custom AppArmor
-profile. Keep Home Assistant OS and Supervisor current.
+profile. This is the narrowest practical security posture for a BACnet/IP app,
+but host networking still reduces its Home Assistant security score by one.
+Keep Home Assistant OS and Supervisor current.
 
 ## Troubleshooting
 
