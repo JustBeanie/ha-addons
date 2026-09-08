@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.16.2 - 2026-09-07
+
+- Republished 1.16.1's AppArmor fixes under a new version. Supervisor loads
+  `apparmor.txt` only when an app is installed or updated, and 1.16.1 shipped
+  four times while the profile was still being repaired, so an install could
+  pick up a profile older than the one in the store. Nothing else changed.
+
 ## 1.16.1 - 2026-09-07
 
 - Fixed the 1.16.0 AppArmor profile denying the container's own init, which left
