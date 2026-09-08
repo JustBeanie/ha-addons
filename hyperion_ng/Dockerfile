@@ -17,19 +17,18 @@ RUN git clone --depth 1 --branch "${HYPERION_VERSION}" --recursive \
 
 WORKDIR /src/hyperion/build
 
-RUN sed -i \
-        -e 's#\$\.get("/cgi/cfg_jsonserver"#\$\.get("./cgi/cfg_jsonserver"#' \
-        /src/hyperion/assets/webconfig/js/hyperion.js; \
-    sed -i -z -E \
+RUN find /src/hyperion -type f -name hyperion.js -exec sed -i \
+        -e 's#\$\.get("/cgi/cfg_jsonserver"#\$\.get("./cgi/cfg_jsonserver"#' {} +; \
+    find /src/hyperion -type f -name hyperion.js -exec sed -i -z -E \
         -e 's#globalThis\.websocket =\s*(document\.location\.protocol == "https:")\s*\?\s*new WebSocket\([^;]+\)\s*:\s*new WebSocket\([^;]+\);#globalThis.websocket = new WebSocket(new URL(".", document.location.href).toString().replace(/^http/, "ws"));#' \
-        /src/hyperion/assets/webconfig/js/hyperion.js; \
-    sed -i \
+        {} +; \
+    find /src/hyperion -type f -name ui_utils.js -exec sed -i \
         -e 's#\.load("/content/#.load("./content/#g' \
-        /src/hyperion/assets/webconfig/js/ui_utils.js; \
-    sed -i \
+        {} +; \
+    find /src/hyperion -type f -name settings.js -exec sed -i \
         -e "s#location.replace('/')#location.replace('./')#" \
-        /src/hyperion/assets/webconfig/js/settings.js; \
-    find /src/hyperion/assets/webconfig -type f -name '*.html' \
+        {} +; \
+    find /src/hyperion -type f -path '*/assets/webconfig/*.html' \
         -exec sed -i -E 's#(href|src)="/#\1="./#g' {} +; \
     cmake -G Ninja -DCMAKE_BUILD_TYPE=Release ..; \
     cmake --build . --target package -- -j"$(nproc)"
