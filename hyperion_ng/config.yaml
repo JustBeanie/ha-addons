@@ -1,7 +1,7 @@
 name: "Hyperion.NG"
 slug: "hyperion_ng"
 description: "Runs Hyperion.NG with Home Assistant ingress support."
-version: "3.0.6"
+version: "3.0.7"
 url: "https://github.com/JustBeanie/ha-addons/tree/main/hyperion_ng"
 image: "ghcr.io/justbeanie/hyperion-ng"
 
@@ -15,11 +15,12 @@ init: false
 backup: cold
 
 # Hyperion's web UI listens on 8090. Home Assistant's ingress proxy connects
-# to this port; explicit port mappings keep native protocols available without
-# granting the container the host network namespace.
+# to this port. Host networking keeps Hyperion's native TCP protocols reachable
+# by Home Assistant and other clients on the host network.
 ingress: true
 ingress_port: 8090
 ingress_entry: ""
+host_network: true
 panel_icon: "mdi:television-ambient-light"
 panel_title: "Hyperion.NG"
 

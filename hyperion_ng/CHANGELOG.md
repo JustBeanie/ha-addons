@@ -1,5 +1,10 @@
 # Changelog
 
+## 3.0.7
+
+- Restore host networking so Home Assistant can reach Hyperion's native JSON
+  API on port 19444 after the app's web token flow completes.
+
 ## 3.0.6
 
 - Fix the token-request approval dialog so Home Assistant's requested token
