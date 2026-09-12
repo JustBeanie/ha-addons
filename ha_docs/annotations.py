@@ -494,10 +494,16 @@ class Handler(BaseHTTPRequestHandler):
 
     def _reply(self, code, obj):
         body = json.dumps(obj).encode("utf-8")
+        if code >= 400:
+            # Some rejections happen before the request body is consumed. Do
+            # not let its unread bytes become a second HTTP/1.1 request line.
+            self.close_connection = True
         self.send_response(code)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
+        if code >= 400:
+            self.send_header("Connection", "close")
         self.end_headers()
         self.wfile.write(body)
 

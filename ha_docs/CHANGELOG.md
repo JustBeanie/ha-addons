@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.16.4 - 2026-09-12
+
+- Fixed the site-header **Sync** button. The browser had been POSTing `{}`
+  while the annotation endpoint deliberately accepts only a body-less sync
+  request, so every click was rejected before the refresh worker could run.
+- Close the HTTP/1.1 connection after every 4xx/5xx reply. An early rejection
+  can leave request bytes unread; keeping that connection alive let those bytes
+  be parsed as a second request and could log a misleading `BrokenPipeError`.
+
 ## 1.16.3 - 2026-09-07
 
 - Silenced the `could not open error log file ... /var/lib/nginx/logs/error.log

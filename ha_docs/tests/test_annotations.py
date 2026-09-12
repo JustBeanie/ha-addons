@@ -1,9 +1,9 @@
+import http.client
 import json
 import tempfile
 import threading
 import unittest
 from pathlib import Path
-from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
 import annotations
@@ -71,6 +71,14 @@ class AnnotationTests(unittest.TestCase):
             server = annotations.ThreadingHTTPServer(
                 ("127.0.0.1", 0), annotations.Handler
             )
+            server_errors = []
+            original_handle_error = server.handle_error
+
+            def record_error(request, client_address):
+                server_errors.append((request, client_address))
+                original_handle_error(request, client_address)
+
+            server.handle_error = record_error
             thread = threading.Thread(target=server.serve_forever, daemon=True)
             thread.start()
             base = f"http://127.0.0.1:{server.server_port}"
@@ -88,14 +96,16 @@ class AnnotationTests(unittest.TestCase):
                 )) as response:
                     self.assertTrue(json.load(response)["ok"])
 
-                bad_sync = Request(
-                    f"{base}/anno/sync",
-                    data=b"{}",
-                    method="POST",
+                connection = http.client.HTTPConnection(
+                    "127.0.0.1", server.server_port
                 )
-                with self.assertRaises(HTTPError) as raised:
-                    urlopen(bad_sync)
-                self.assertEqual(raised.exception.code, 400)
+                connection.request("POST", "/anno/sync", body=b"{}")
+                response = connection.getresponse()
+                self.assertEqual(response.status, 400)
+                self.assertEqual(response.getheader("Connection"), "close")
+                response.read()
+                connection.close()
+                self.assertEqual(server_errors, [])
 
                 with urlopen(Request(
                     f"{base}/anno/sync",

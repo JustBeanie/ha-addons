@@ -3,6 +3,16 @@ from pathlib import Path
 
 
 class RuntimePolicyTests(unittest.TestCase):
+    def test_sync_request_has_no_json_body(self):
+        annotate_script = (
+            Path(__file__).resolve().parents[1]
+            / "overrides"
+            / "assets"
+            / "annotate.js"
+        ).read_text(encoding="utf-8")
+
+        self.assertNotRegex(annotate_script, r'api\("sync",\s*\{')
+
     def test_git_token_is_not_embedded_in_persistent_remote_url(self):
         run_script = (Path(__file__).resolve().parents[1] / "run.sh").read_text(
             encoding="utf-8"

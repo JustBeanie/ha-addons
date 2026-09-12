@@ -88,9 +88,11 @@
 
   function api(route, body) {
     var options = { headers: { "Content-Type": "application/json" } };
-    if (body) {
+    if (body !== undefined) {
       options.method = "POST";
-      options.body = JSON.stringify(body);
+      if (body !== null) {
+        options.body = JSON.stringify(body);
+      }
     }
     return fetch(BASE + "anno/" + route, options).then(function (response) {
       if (!response.ok) {
@@ -807,7 +809,7 @@
 
     api("health")
       .then(function (before) {
-        return api("sync", {}).then(function () {
+        return api("sync", null).then(function () {
           watchSync(before || {}, Date.now());
         });
       })
