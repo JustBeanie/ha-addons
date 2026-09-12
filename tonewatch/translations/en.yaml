@@ -1,0 +1,13 @@
+configuration:
+  log_level:
+    name: Log level
+    description: Set the verbosity of ToneWatch's structured logs.
+  public_base_url:
+    name: Public base URL
+    description: Optional direct HTTP or HTTPS URL used to build recording links for external consumers.
+  mqtt_mode:
+    name: MQTT mode
+    description: Choose Supervisor credentials, manual targets, or no MQTT publishing.
+  ui_password:
+    name: UI password
+    description: Optional password for the ToneWatch web UI.

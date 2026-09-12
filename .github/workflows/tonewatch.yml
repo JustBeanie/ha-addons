@@ -1,0 +1,87 @@
+---
+name: ToneWatch
+
+on:
+  pull_request:
+    paths:
+      - "tonewatch/**"
+      - ".github/workflows/tonewatch.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "tonewatch/**"
+      - ".github/workflows/tonewatch.yml"
+  schedule:
+    - cron: "17 4 * * 0"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tonewatch-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  manifest:
+    name: Manifest tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.13"
+      - name: Install test dependencies
+        run: pip install --disable-pip-version-check pyyaml
+      - name: Run manifest tests
+        working-directory: tonewatch
+        run: python -m unittest discover -s tests -v
+
+  lint:
+    name: Static analysis
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Lint Home Assistant app manifest
+        uses: frenck/action-addon-linter@b9cfd1bc62ba60d2c4fc96317b5f7ada5923f4a7 # v2.21.1
+        with:
+          path: ./tonewatch
+
+  image:
+    name: Published multi-arch image
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # This intentionally stays red until v0.3.0 is released and the private
+      # GHCR package becomes public. Resolve anonymously, as Supervisor does.
+      - name: Resolve the published multi-arch image
+        run: |
+          set -euo pipefail
+          version="$(sed -n 's/^version: "\(.*\)"/\1/p' tonewatch/config.yaml)"
+          test -n "${version}"
+          repo="justbeanie/tonewatch"
+          echo "Resolving ghcr.io/${repo}:${version}"
+          token="$(curl -fsSL "https://ghcr.io/token?scope=repository:${repo}:pull&service=ghcr.io" | jq -r .token)"
+          test -n "${token}" && test "${token}" != "null"
+          curl -fsSL \
+            -H "Authorization: Bearer ${token}" \
+            -H "Accept: application/vnd.oci.image.index.v1+json" \
+            -H "Accept: application/vnd.docker.distribution.manifest.list.v2+json" \
+            "https://ghcr.io/v2/${repo}/manifests/${version}" > image-index.json
+          test "$(jq '[.manifests[] | select(.platform.os == "linux" and .platform.architecture == "amd64")] | length' image-index.json)" -ge 1
+          test "$(jq '[.manifests[] | select(.platform.os == "linux" and .platform.architecture == "arm64")] | length' image-index.json)" -ge 1
+          echo "ghcr.io/${repo}:${version} is a public linux/amd64 and linux/arm64 image index."
