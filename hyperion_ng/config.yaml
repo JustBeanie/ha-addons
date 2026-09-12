@@ -1,7 +1,7 @@
 name: "Hyperion.NG"
 slug: "hyperion_ng"
 description: "Runs Hyperion.NG with Home Assistant ingress support."
-version: "3.0.7"
+version: "3.0.8"
 url: "https://github.com/JustBeanie/ha-addons/tree/main/hyperion_ng"
 image: "ghcr.io/justbeanie/hyperion-ng"
 
@@ -12,7 +12,6 @@ arch:
 # The app uses a signed, published multi-architecture image. Home Assistant
 # downloads updates instead of compiling Hyperion on the host.
 init: false
-backup: cold
 
 # Hyperion's web UI listens on 8090. Home Assistant's ingress proxy connects
 # to this port. Host networking keeps Hyperion's native TCP protocols reachable

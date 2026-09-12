@@ -1,5 +1,10 @@
 # Changelog
 
+## 3.0.8
+
+- Use hot backups so Home Assistant backups no longer stop and restart
+  Hyperion (and drop LED grabber connections).
+
 ## 3.0.7
 
 - Restore host networking so Home Assistant can reach Hyperion's native JSON
