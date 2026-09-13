@@ -502,7 +502,19 @@ def repair_issue_id(entity_id: str) -> str:
     return ISSUE_PREFIX + re.sub(r"[^a-z0-9_]+", "_", entity_id.casefold())
 
 
-def repair_instruction(entity_id: str, config: dict, outcome: str, replacement: str | None, rule: str | None) -> str:
+def entity_editor_url(entity_id: str, config_id: str | None) -> str | None:
+    """Return the Home Assistant editor URL for a checked entity, if known."""
+    if not config_id:
+        return None
+    if entity_id.startswith("automation."):
+        return "/config/automation/edit/" + urllib.parse.quote(str(config_id), safe="")
+    if entity_id.startswith("script."):
+        return "/config/script/edit/" + urllib.parse.quote(str(config_id), safe="")
+    return None
+
+
+def repair_instruction(entity_id: str, config: dict, outcome: str, replacement: str | None,
+                       rule: str | None, config_id: str | None = None) -> str:
     """Human-facing, report-only remediation text for a Spook Repairs issue."""
     link = DOCS_RE.search(config.get("description", ""))
     found = f"`{link.group('marker')} {link.group('url')}`" if link else "no recognizable Docs link"
@@ -513,12 +525,18 @@ def repair_instruction(entity_id: str, config: dict, outcome: str, replacement: 
         action = f"Replace the current Docs URL with `{proposed}`; leave every other field unchanged."
     else:
         action = "Manually add exactly one valid `📖 Docs:` URL that points to the documented entity section."
+    editor_url = entity_editor_url(entity_id, config_id)
+    entity = f"[{entity_id}]({editor_url})" if editor_url else f"`{entity_id}`"
+    editor_instruction = (
+        "Open the linked automation or script in Home Assistant"
+        if editor_url else "Open this automation or script in Home Assistant"
+    )
     return (
-        f"Entity: `{entity_id}`\n\n"
+        f"Entity: {entity}\n\n"
         f"Detected Docs link: {found}\n\n"
         f"Problem: {outcome}.\n\n"
         f"What to fix: {action}\n\n"
-        "Open this automation or script in Home Assistant and edit only its description. "
+        f"{editor_instruction} and edit only its description. "
         "HA Docs only reported this Repair; it did not modify the entity."
     )
 
@@ -675,11 +693,17 @@ def check_ha(repo: pathlib.Path, api: CoreApi, github_base: str, report: bool, a
                     # entity from the site panel before the next full scan.
                     scan_status.write_entity(entity_id, "valid")
                 continue
+            # The same config key opens the native editor. Include it in the
+            # Repair itself so the raised issue is actionable without first
+            # finding the entity elsewhere in Home Assistant.
+            config_id = getattr(api, "config_identifiers", {}).get(entity_id)
             try:
                 api.call_service("repairs", "create", {
                     "issue_id": repair_issue_id(entity_id),
                     "title": f"HA Docs link needs repair: {entity_id}",
-                    "description": repair_instruction(entity_id, config, outcome, replacement, rule),
+                    "description": repair_instruction(
+                        entity_id, config, outcome, replacement, rule, config_id
+                    ),
                     "severity": "warning",
                     "persistent": True,
                 })
@@ -691,10 +715,9 @@ def check_ha(repo: pathlib.Path, api: CoreApi, github_base: str, report: bool, a
                     scan_status.write_entity(entity_id, "failed", reason="could not raise repair")
                 continue
             raised += 1
-            # config_id is what the site panel needs to deep-link into the
-            # automation or script editor.  getattr because a test double is
-            # not obliged to carry CoreApi's identifier cache.
-            config_id = getattr(api, "config_identifiers", {}).get(entity_id)
+            # config_id is what the Repair and site panel need to deep-link
+            # into the automation or script editor. getattr because a test
+            # double is not obliged to carry CoreApi's identifier cache.
             if full_scan:
                 issues.append({
                     "entity_id": entity_id, "reason": outcome,

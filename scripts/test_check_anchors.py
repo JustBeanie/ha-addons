@@ -247,6 +247,32 @@ class CheckAnchorsTests(unittest.TestCase):
         self.assertIn("did not modify the entity", description)
         self.assertEqual(api.writes, [])
 
+    def test_repair_links_directly_to_the_raised_script_or_automation(self):
+        api = FakeApi({
+            "automation.needs_docs": self.config(marker="Docs:"),
+            "script.needs_docs": self.config(marker="Docs:"),
+        })
+        api.config_identifiers = {
+            "automation.needs_docs": "automation/config id",
+            "script.needs_docs": "script/config id",
+        }
+
+        failures = CHECK.check_ha(self.repo, api, BASE, True, self.audit)
+
+        self.assertEqual(failures, 0)
+        descriptions = {
+            call[2]["issue_id"]: call[2]["description"] for call in api.services
+            if call[:2] == ("repairs", "create")
+        }
+        self.assertIn(
+            "[automation.needs_docs](/config/automation/edit/automation%2Fconfig%20id)",
+            descriptions["ha_docs_link_automation_needs_docs"],
+        )
+        self.assertIn(
+            "[script.needs_docs](/config/script/edit/script%2Fconfig%20id)",
+            descriptions["ha_docs_link_script_needs_docs"],
+        )
+
     def test_info_logs_are_timestamped_and_include_scan_lifecycle(self):
         stream = io.StringIO()
         CHECK.configure_logging("info", stream)
@@ -320,7 +346,7 @@ class CheckAnchorsTests(unittest.TestCase):
 
     def test_runner_starts_ingress_before_background_refresh_worker(self):
         runner = (ROOT / "ha_docs" / "run.sh").read_text(encoding="utf-8")
-        self.assertLess(runner.index("nginx &"), runner.index("refresh_worker &"))
+        self.assertLess(runner.index("nginx -e stderr &"), runner.index("refresh_worker &"))
         self.assertIn("Initial documentation sync is in progress", runner)
         self.assertIn("wait \"${WORKER_PID}\"", runner)
         self.assertIn("entity_watch.py", runner)

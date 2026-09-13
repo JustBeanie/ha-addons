@@ -8,6 +8,8 @@
 - Close the HTTP/1.1 connection after every 4xx/5xx reply. An early rejection
   can leave request bytes unread; keeping that connection alive let those bytes
   be parsed as a second request and could log a misleading `BrokenPipeError`.
+- Made every HA Docs-link Repair actionable at its source: the entity named in
+  a raised Repair now links directly to its automation or script editor.
 
 ## 1.16.3 - 2026-09-07
 
