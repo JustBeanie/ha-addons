@@ -6,7 +6,9 @@ replace __tests__/app_manifest.test.js and cover the half that stayed here.
 """
 
 import re
+import struct
 import unittest
+import zlib
 from pathlib import Path
 
 import yaml
@@ -34,6 +36,7 @@ class AppManifestTests(unittest.TestCase):
         self.assertEqual(self.manifest["ingress_port"], 18082)
         self.assertEqual(self.manifest["ingress_entry"], "admin/")
         self.assertEqual(self.manifest["services"], ["mqtt:want"])
+        self.assertNotEqual(self.manifest.get("stage"), "experimental")
 
     def test_maps_app_config_under_the_current_naming(self):
         self.assertIn(
@@ -84,7 +87,7 @@ class AppManifestTests(unittest.TestCase):
         self.assertRegex(self.manifest["version"], r"^\d+\.\d+\.\d+$")
 
     def test_presentation_assets_are_store_compatible(self):
-        for name, dimensions in (("icon.png", (128, 128)), ("logo.png", (250, 100))):
+        for name, dimensions in (("icon.png", (200, 200)), ("logo.png", (250, 100))):
             path = APP_ROOT / name
             self.assertTrue(path.is_file(), f"missing presentation asset: {name}")
             data = path.read_bytes()
@@ -92,6 +95,28 @@ class AppManifestTests(unittest.TestCase):
             width = int.from_bytes(data[16:20], "big")
             height = int.from_bytes(data[20:24], "big")
             self.assertEqual((width, height), dimensions)
+            if name == "icon.png":
+                offset = 8
+                image_data = bytearray()
+                while offset < len(data):
+                    length = struct.unpack(">I", data[offset : offset + 4])[0]
+                    chunk_type = data[offset + 4 : offset + 8]
+                    chunk_data = data[offset + 8 : offset + 8 + length]
+                    crc = struct.unpack(
+                        ">I", data[offset + 8 + length : offset + 12 + length]
+                    )[0]
+                    self.assertEqual(
+                        zlib.crc32(chunk_type + chunk_data) & 0xFFFFFFFF,
+                        crc,
+                        "invalid PNG chunk in icon.png",
+                    )
+                    if chunk_type == b"IDAT":
+                        image_data.extend(chunk_data)
+                    offset += length + 12
+                    if chunk_type == b"IEND":
+                        break
+                self.assertEqual(offset, len(data))
+                zlib.decompress(image_data)
 
     def test_security_contract_is_explicit(self):
         self.assertNotIn("privileged", self.manifest)

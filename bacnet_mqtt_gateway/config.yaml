@@ -22,7 +22,6 @@ image: "ghcr.io/justbeanie/bacnet-mqtt-gateway-{arch}"
 # Container health is a HEALTHCHECK in the image rather than the obsolete
 # `watchdog:` key, which the linter also rejects.
 init: false
-stage: experimental
 host_network: true
 ingress: true
 ingress_port: 18082
