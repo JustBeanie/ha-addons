@@ -87,7 +87,7 @@ class AppManifestTests(unittest.TestCase):
         self.assertRegex(self.manifest["version"], r"^\d+\.\d+\.\d+$")
 
     def test_presentation_assets_are_store_compatible(self):
-        for name, dimensions in (("icon.png", (200, 200)), ("logo.png", (250, 100))):
+        for name, dimensions in (("icon.png", (128, 128)), ("logo.png", (250, 100))):
             path = APP_ROOT / name
             self.assertTrue(path.is_file(), f"missing presentation asset: {name}")
             data = path.read_bytes()
