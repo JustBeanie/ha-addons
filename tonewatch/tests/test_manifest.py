@@ -29,7 +29,8 @@ class ToneWatchManifestTests(unittest.TestCase):
         self.assertNotIn("{arch}", self.manifest["image"])
         self.assertFalse(self.manifest["init"])
         self.assertTrue(self.manifest["ingress"])
-        self.assertEqual(self.manifest["ingress_port"], 8099)
+        # The app listens on 8099, the Supervisor default; the add-on linter rejects the explicit key.
+        self.assertNotIn("ingress_port", self.manifest)
         self.assertEqual(self.manifest["panel_icon"], "mdi:fire-truck")
         self.assertEqual(self.manifest["panel_title"], "ToneWatch")
 

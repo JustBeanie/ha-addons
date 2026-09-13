@@ -17,7 +17,6 @@ image: "ghcr.io/justbeanie/tonewatch"
 # The image starts tini as its init process.
 init: false
 ingress: true
-ingress_port: 8099
 panel_icon: mdi:fire-truck
 panel_title: ToneWatch
 audio: true
