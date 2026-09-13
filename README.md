@@ -1,7 +1,8 @@
 <div align="center">
+  
 # Beanie’s Home Assistant Apps
 
-Community-maintained apps for Home Assistant OS and Supervisor.
+**Apps for Home Assistant OS and Supervisor.**
 
 [![GitHub activity](https://img.shields.io/github/commit-activity/m/JustBeanie/ha-addons?label=activity)](https://github.com/JustBeanie/ha-addons/commits/main/)
 [![GitHub issues](https://img.shields.io/github/issues/JustBeanie/ha-addons)](https://github.com/JustBeanie/ha-addons/issues)
