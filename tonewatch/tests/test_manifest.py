@@ -23,7 +23,7 @@ class ToneWatchManifestTests(unittest.TestCase):
     def test_identity_and_runtime_contract(self):
         self.assertEqual(self.manifest["name"], "ToneWatch")
         self.assertEqual(self.manifest["slug"], "tonewatch")
-        self.assertEqual(self.manifest["version"], "0.3.0")
+        self.assertEqual(self.manifest["version"], "0.6.1")
         self.assertEqual(sorted(self.manifest["arch"]), ["aarch64", "amd64"])
         self.assertEqual(self.manifest["image"], "ghcr.io/justbeanie/tonewatch")
         self.assertNotIn("{arch}", self.manifest["image"])

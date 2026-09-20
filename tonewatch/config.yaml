@@ -1,5 +1,5 @@
 name: "ToneWatch"
-version: "0.3.0"
+version: "0.6.1"
 slug: "tonewatch"
 description: >-
   Detect two-tone pages, record calls, and publish supplemental notifications
