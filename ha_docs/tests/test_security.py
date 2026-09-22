@@ -35,6 +35,33 @@ def profile_rules(path):
     return rules
 
 
+SECURITY_HEADERS = frozenset(
+    {"X-Content-Type-Options", "Referrer-Policy", "Permissions-Policy"}
+)
+
+
+def nginx_header_blocks(text):
+    """{block name: header names} for every http/server/location block that
+    sets at least one add_header, where the name is `http`, `server` or
+    `location <path>`. Blocks with no add_header of their own inherit, so they
+    are left out."""
+    blocks = {}
+    stack = []
+    for raw in text.splitlines():
+        line = raw.split("#", 1)[0].strip()
+        if not line:
+            continue
+        if line.endswith("{"):
+            stack.append(" ".join(line[:-1].split()))
+            continue
+        if line == "}":
+            stack.pop()
+            continue
+        if line.startswith("add_header ") and stack:
+            blocks.setdefault(stack[-1], set()).add(line.split()[1])
+    return blocks
+
+
 class AppArmorProfileTests(unittest.TestCase):
     def test_app_profile_grants_what_the_base_image_needs(self):
         rules = profile_rules(APP_DIR / "apparmor.txt")
@@ -64,6 +91,22 @@ class AppSecurityTests(unittest.TestCase):
         self.assertIn("allow 172.30.32.2;", nginx)
         self.assertIn("allow 127.0.0.1;", nginx)
         self.assertIn("deny all;", nginx)
+
+    def test_every_add_header_block_repeats_the_security_headers(self):
+        # nginx does not merge add_header: one in a location replaces all of
+        # the http-level ones. Adding Cache-Control to `location /` (Plan 021)
+        # would otherwise have stripped nosniff and friends from every page.
+        blocks = nginx_header_blocks((APP_DIR / "nginx.conf").read_text(encoding="utf-8"))
+
+        self.assertIn("http", blocks)
+        self.assertIn("location /", blocks)
+        for name, headers in blocks.items():
+            with self.subTest(block=name):
+                self.assertEqual(set(), SECURITY_HEADERS - headers)
+        self.assertIn("Cache-Control", blocks["location /"])
+        # annotations.py sends its own no-store; a second one from nginx would
+        # duplicate the header on every /anno/ response.
+        self.assertNotIn("location /anno/", blocks)
 
     def test_main_workflow_publishes_the_declared_image(self):
         workflow = (REPO_DIR / ".github" / "workflows" / "ha-docs.yml").read_text(

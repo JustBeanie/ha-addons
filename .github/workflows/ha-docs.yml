@@ -178,6 +178,9 @@ jobs:
                 # exercised from loopback as well.
                 docker exec "${name}" python3 -c \
                   "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8099/anno/health', timeout=5)"
+                # flock for the checkout lock, and the cache/security headers,
+                # under the real profile (Plan 021).
+                docker exec -i "${name}" python3 - < ha_docs/tests/container_smoke.py
                 exit 0
               fi
             else
@@ -189,9 +192,48 @@ jobs:
           echo "HA Docs did not become healthy" >&2
           exit 1
 
+  browser:
+    name: Browser tests (Chromium + WebKit)
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - name: Install MkDocs as the image pins it
+        run: python -m pip install -r ha_docs/requirements.txt
+      - name: Vendor the Mermaid runtime the image ships
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Same version the Dockerfile downloads, read from the same ARG.
+          version="$(sed -n 's/^ARG MERMAID_VERSION=//p' ha_docs/Dockerfile)"
+          test -n "${version}"
+          curl -fsSL -o ha_docs/overrides/assets/mermaid.min.js \
+            "https://cdn.jsdelivr.net/npm/mermaid@${version}/dist/mermaid.min.js"
+      - name: Build the fixture site with the add-on's mkdocs.yml
+        working-directory: ha_docs
+        env:
+          PYTHONPATH: .
+        run: python -m mkdocs build --quiet -f tests/browser/mkdocs.test.yml -d "${RUNNER_TEMP}/site"
+      - name: Install Playwright and its browsers
+        working-directory: ha_docs/tests/browser
+        run: |
+          npm ci --no-audit --no-fund
+          npx playwright install --with-deps chromium webkit
+      - name: Run browser tests
+        working-directory: ha_docs/tests/browser
+        env:
+          HA_DOCS_TEST_SITE: ${{ runner.temp }}/site
+        run: npm test
+
   prepare-publish:
     name: Prepare published image
-    needs: [lint, build]
+    needs: [lint, build, browser]
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     outputs:
