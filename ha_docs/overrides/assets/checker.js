@@ -408,15 +408,31 @@
     }
 
     if (drawer) {
-      var body = drawer.querySelector(".chk-body");
-      body.textContent = "";
-      body.appendChild(contents());
+      fill(drawer.querySelector(".chk-body"));
     }
     var mount = mountPoint();
     if (mount && narrow && narrow.matches) {
-      mount.textContent = "";
-      mount.appendChild(contents());
+      fill(mount);
     }
+  }
+
+  // Replaces a panel's rows only when what they would say has changed. With the
+  // panel open this runs every 3 s, and rebuilding identical rows each time
+  // reset the reader's scroll position and dropped any text they had selected
+  // in it. Comparing the rendered markup rather than the payload keeps the
+  // relative times honest: "just now" becoming "1 min ago" is a change.
+  function fill(target) {
+    var scratch = document.createElement("div");
+    scratch.appendChild(contents());
+    var html = scratch.innerHTML;
+    if (target.chkRendered === html) {
+      return;
+    }
+    target.textContent = "";
+    while (scratch.firstChild) {
+      target.appendChild(scratch.firstChild);
+    }
+    target.chkRendered = html;
   }
 
   function toggleDrawer() {
@@ -477,8 +493,19 @@
     timer = setTimeout(poll, wantsFast() ? POLL_FAST : POLL_SLOW);
   }
 
+  // One request at a time. Opening the drawer, the narrow drawer's open event
+  // and the tab becoming visible all ask for an immediate poll, and can do so
+  // together; a request already on its way answers all of them, and the
+  // schedule that follows it picks the right cadence for whatever is open by
+  // then.
+  var inFlight = false;
+
   function poll() {
     clearTimeout(timer);
+    if (inFlight) {
+      return;
+    }
+    inFlight = true;
     api("scan")
       .then(function (payload) {
         failures = 0;
@@ -493,7 +520,10 @@
           paint();
         }
       })
-      .then(schedule);
+      .then(function () {
+        inFlight = false;
+        schedule();
+      });
   }
 
   // ---------------------------------------------------------------------------
