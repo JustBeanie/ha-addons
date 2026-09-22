@@ -115,7 +115,11 @@ class AppSecurityTests(unittest.TestCase):
 
         self.assertIn("prepare-publish:", workflow)
         self.assertIn("publish-manifest:", workflow)
-        self.assertIn("publish-multi-arch-manifest@2026.06.0", workflow)
+        # Dependency updates may change the ref; the publishing action must stay.
+        self.assertRegex(
+            workflow,
+            r"(?m)^\s+uses: home-assistant/builder/actions/publish-multi-arch-manifest@\S+",
+        )
 
     def test_main_workflow_runs_the_image_under_its_own_profile(self):
         # A profile that is never loaded and an image that is never started are
