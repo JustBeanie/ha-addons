@@ -14,11 +14,18 @@ runs unless the docs happen to change.
 """
 
 import asyncio
+import contextlib
 import datetime as dt
 import logging
 import os
 import signal
 import sys
+import time
+
+try:
+    import fcntl
+except ImportError:  # Windows workstation: no checkout lock to share anyway.
+    fcntl = None
 
 
 LOGGER = logging.getLogger("ha_docs.entity_watch")
@@ -34,6 +41,11 @@ RUNTIME_ATTRIBUTES = {
 # flips, which is exactly what execution activity looks like, so the transition
 # has to be recognised by the value rather than by the shape of the event.
 RELOAD_STATES = {"unavailable", "unknown"}
+# However busy the event stream, a batch starts within this long of its first
+# event. The debounce alone would let a steady trickle postpone it for ever.
+MAX_COLLECT_SECONDS = 30
+LOCK_POLL_SECONDS = 0.5
+CHILD_TERMINATE_SECONDS = 5
 
 
 class LocalIsoFormatter(logging.Formatter):
@@ -111,44 +123,107 @@ class EntityWatcher:
         self.github_base = os.environ["HA_DOCS_GITHUB_BASE"]
         self.audit_file = os.environ["HA_DOC_LINK_AUDIT"]
         self.ready_file = os.getenv("HA_DOCS_READY_FILE", "/data/.doc-link-checker-ready")
+        # Shared with run.sh's refresh worker. Empty means no locking, which is
+        # what a workstation run gets.
+        self.lock_file = os.getenv("HA_DOCS_CHECKOUT_LOCK", "")
         self.log_level = os.getenv("HA_DOCS_LOG_LEVEL", "info")
         self.debounce_seconds = int(os.getenv("HA_DOCS_ENTITY_DEBOUNCE", "3"))
         self.concurrency = os.getenv("HA_DOCS_SCAN_CONCURRENCY", "4")
         self.progress_interval = os.getenv("HA_DOCS_PROGRESS_INTERVAL", "25")
         self.heartbeat_interval = os.getenv("HA_DOCS_HEARTBEAT_INTERVAL", "10")
+        self.max_collect_seconds = MAX_COLLECT_SECONDS
         self.pending: set[str] = set()
         self.debounce: asyncio.Task | None = None
-        self.running: set[asyncio.Task] = set()
+        # At most one batch at a time. Entities that change while it runs wait
+        # in `pending` and go in the next one.
+        self.active: asyncio.Task | None = None
+        # When the first entity of the current collection window arrived, so
+        # a steady stream of edits cannot push the check back for ever.
+        self.window_started: float | None = None
         self.stop = asyncio.Event()
 
     def described(self, entity_ids: list[str]) -> str:
         """How a batch is named in the log: the entity, or how many there are."""
         return entity_ids[0] if len(entity_ids) == 1 else f"{len(entity_ids)} changed entities"
 
+    def command(self, entity_ids: list[str]) -> list[str]:
+        selection = []
+        for entity_id in entity_ids:
+            selection += ["--entity-id", entity_id]
+        return [
+            sys.executable, "/opt/ha_docs/check_anchors.py", "--ha", "--report",
+            *selection,
+            "--log-level", self.log_level,
+            "--scan-concurrency", self.concurrency,
+            "--progress-interval", self.progress_interval,
+            "--heartbeat-interval", self.heartbeat_interval,
+            "--github-base", self.github_base,
+            "--audit-file", self.audit_file,
+            self.repo,
+        ]
+
+    @contextlib.asynccontextmanager
+    async def checkout_lock(self):
+        """Hold the lock run.sh takes around every refresh pass.
+
+        Without it a check can read /data/repo while the refresh worker is in
+        the middle of `git reset --hard` on it, and raise or clear a Repair
+        against files that never existed together in one commit.
+
+        Non-blocking and polled rather than a blocking flock in a thread: a
+        thread blocked in flock() cannot be cancelled, so shutting down while
+        a long refresh held the lock would hang.
+        """
+        if not self.lock_file or fcntl is None:
+            yield
+            return
+        fd = os.open(self.lock_file, os.O_RDWR | os.O_CREAT, 0o644)
+        try:
+            logged = False
+            while True:
+                try:
+                    fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    break
+                except BlockingIOError:
+                    if not logged:
+                        LOGGER.debug("[ha] Targeted Docs-link check waiting for the refresh worker")
+                        logged = True
+                    await asyncio.sleep(LOCK_POLL_SECONDS)
+            yield
+        finally:
+            # Closing the descriptor is what releases the lock.
+            os.close(fd)
+
+    async def stop_child(self, process) -> None:
+        """Take a cancelled batch's checker down with it.
+
+        Cancelling the task only abandons process.wait(); the child would go
+        on creating and removing Repairs until the container itself stopped.
+        """
+        if process.returncode is not None:
+            return
+        process.terminate()
+        try:
+            await asyncio.wait_for(process.wait(), CHILD_TERMINATE_SECONDS)
+        except asyncio.TimeoutError:
+            process.kill()
+            await process.wait()
+
     async def run_check(self, entity_ids: list[str]) -> None:
         described = self.described(entity_ids)
+        process = None
         try:
-            LOGGER.info("[ha] Entity update detected; checking only entity=%s", described)
-            selection = []
-            for entity_id in entity_ids:
-                selection += ["--entity-id", entity_id]
-            process = await asyncio.create_subprocess_exec(
-                sys.executable, "/opt/ha_docs/check_anchors.py", "--ha", "--report",
-                *selection,
-                "--log-level", self.log_level,
-                "--scan-concurrency", self.concurrency,
-                "--progress-interval", self.progress_interval,
-                "--heartbeat-interval", self.heartbeat_interval,
-                "--github-base", self.github_base,
-                "--audit-file", self.audit_file,
-                self.repo,
-            )
-            result = await process.wait()
+            async with self.checkout_lock():
+                LOGGER.info("[ha] Entity update detected; checking only entity=%s", described)
+                process = await asyncio.create_subprocess_exec(*self.command(entity_ids))
+                result = await process.wait()
             if result:
                 LOGGER.error("[ha] Targeted Docs-link check failed: entity=%s exit_code=%d", described, result)
             else:
                 LOGGER.info("[ha] Targeted Docs-link check complete: entity=%s", described)
         except asyncio.CancelledError:
+            if process is not None:
+                await self.stop_child(process)
             raise
         except Exception as exc:  # Keep event monitoring alive after one failure.
             LOGGER.error("[ha] Targeted Docs-link check error: entity=%s error=%s", described, exc)
@@ -157,10 +232,12 @@ class EntityWatcher:
         """Wait out the debounce, then check everything that arrived during it.
 
         Restarted by every new event, so a burst is checked once it stops rather
-        than once per entity.  The initial documentation sync is waited out first
+        than once per entity -- but never later than max_collect_seconds after
+        the burst began.  The initial documentation sync is waited out first
         and not on the far side of the debounce: a check before it means nothing,
         and events arriving meanwhile should join this batch rather than each
-        start one that then queues behind the same wait.
+        start one that then queues behind the same wait.  That wait does not
+        count against the cap.
         """
         while not os.path.exists(self.ready_file) and not self.stop.is_set():
             LOGGER.debug(
@@ -170,15 +247,40 @@ class EntityWatcher:
             await asyncio.sleep(1)
         if self.stop.is_set():
             return
-        await asyncio.sleep(self.debounce_seconds)
+        now = time.monotonic()
+        if self.window_started is None:
+            self.window_started = now
+        remaining = self.window_started + self.max_collect_seconds - now
+        await asyncio.sleep(max(0.0, min(self.debounce_seconds, remaining)))
+        self.debounce = None
+        self.dispatch()
+
+    def dispatch(self) -> None:
+        """Start a batch from `pending`, unless one is already running.
+
+        A running batch picks `pending` up itself when it finishes, so nothing
+        that arrives mid-check is lost and no two checks ever overlap.
+        """
+        if self.stop.is_set() or (self.active is not None and not self.active.done()):
+            return
+        if not self.pending:
+            self.window_started = None
+            return
         entity_ids = sorted(self.pending)
         self.pending.clear()
-        self.debounce = None
-        if not entity_ids:
-            return
-        task = asyncio.create_task(self.run_check(entity_ids))
-        self.running.add(task)
-        task.add_done_callback(self.running.discard)
+        self.window_started = None
+        self.active = asyncio.create_task(self.run_batch(entity_ids))
+
+    async def run_batch(self, entity_ids: list[str]) -> None:
+        try:
+            await self.run_check(entity_ids)
+        finally:
+            self.active = None
+            # A debounce still counting down will dispatch on its own; only an
+            # idle watcher with leftovers needs a push from here.
+            if self.pending and self.debounce is None and not self.stop.is_set():
+                LOGGER.debug("[ha] Targeted Docs-link check picking up %d queued entities", len(self.pending))
+                self.dispatch()
 
     def queue_check(self, entity_id: str) -> None:
         self.pending.add(entity_id)
@@ -237,7 +339,7 @@ class EntityWatcher:
 
     async def close(self) -> None:
         self.stop.set()
-        tasks = [task for task in (self.debounce, *self.running) if task is not None]
+        tasks = [task for task in (self.debounce, self.active) if task is not None]
         for task in tasks:
             task.cancel()
         if tasks:
