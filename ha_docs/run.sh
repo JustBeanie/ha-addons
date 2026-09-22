@@ -89,6 +89,11 @@ readonly SYNC_REQUEST=/data/.sync-now
 # Bumped after every completed refresh pass, changed or not, so the site can
 # tell "still working" from "looked, nothing new".
 readonly REFRESH_MARKER=/data/.last_refresh
+# Held by the refresh worker and by entity_watch.py around each targeted check,
+# so a check never reads /data/repo mid `git reset --hard` and never raises or
+# withdraws a Repair while the reap sweep is doing the same. Empty and
+# disposable; flock state lives in the kernel, not the file.
+readonly CHECKOUT_LOCK=/data/.checkout.lock
 
 # The built site is cached against the commit it came from AND the builder that
 # produced it. Keying on the commit alone was a bug: /data survives an image
@@ -241,6 +246,7 @@ start_entity_update_watcher() {
         HA_DOCS_GITHUB_BASE="${base}" \
         HA_DOC_LINK_AUDIT="${DOC_LINK_AUDIT}" \
         HA_DOCS_READY_FILE="${DOC_LINK_READY}" \
+        HA_DOCS_CHECKOUT_LOCK="${CHECKOUT_LOCK}" \
         HA_DOCS_LOG_LEVEL="${LOG_LEVEL}" \
         HA_DOCS_ENTITY_DEBOUNCE="${ENTITY_UPDATE_DEBOUNCE}" \
         HA_DOCS_SCAN_CONCURRENCY="${REPAIR_SCAN_CONCURRENCY}" \
@@ -248,6 +254,23 @@ start_entity_update_watcher() {
         HA_DOCS_HEARTBEAT_INTERVAL="${REPAIR_SCAN_HEARTBEAT_INTERVAL}" \
         python3 /opt/ha_docs/entity_watch.py &
     ENTITY_WATCHER_PID=$!
+}
+
+# Runs "$@" holding CHECKOUT_LOCK, and returns its status. Taken only here, at
+# the outer entrypoints, never inside anything that already holds it. Closing
+# the descriptor releases the lock; the commands run inside inherit it, but all
+# of them have exited by then.
+with_checkout_lock() {
+    local fd status
+    exec {fd}>>"${CHECKOUT_LOCK}" || return 1
+    if ! flock -x "${fd}"; then
+        exec {fd}>&-
+        return 1
+    fi
+    "$@"
+    status=$?
+    exec {fd}>&-
+    return "${status}"
 }
 
 # One pull + conditional rebuild. Returns non-zero only on hard failure.
@@ -260,9 +283,20 @@ refresh() {
     # is invisible to every other path here. Ahead of sync_repo because it does
     # not depend on the docs: a site frozen by a broken anchor returns early
     # further down, and must not take the cleanup of stale Repairs with it.
-    if ! reap_orphan_doc_link_repairs; then
+    # Under the lock on its own, not with the pass below: it removes Repairs a
+    # targeted check could be raising at the same moment, but it must still run
+    # when everything after it fails.
+    if ! with_checkout_lock reap_orphan_doc_link_repairs; then
         log_warning "Orphaned Docs-link Repair sweep failed"
     fi
+
+    with_checkout_lock refresh_checkout "${reason}" "${started_at}"
+}
+
+# Everything that reads or rewrites /data/repo, from the pull to the full
+# Repair scan. Always called through with_checkout_lock.
+refresh_checkout() {
+    local reason=$1 started_at=$2
 
     if ! sync_repo; then
         log_warning "Repository sync failed; continuing to serve the current site"
