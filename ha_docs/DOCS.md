@@ -125,6 +125,11 @@ Because `mkdocs build` cannot validate diagram syntax, a block that fails to
 parse is rendered as a visible error with its source, rather than as an empty
 gap.
 
+The runtime is only loaded on a page that has a diagram, and without holding up
+the rest of the page, so highlights and the header buttons appear straight
+away. Diagrams are drawn as they come near the screen: one far down a long page
+shows its source text until you scroll towards it.
+
 ### Sortable tables
 
 Click a column header to sort by it. A second click reverses, and a third puts
