@@ -1,5 +1,36 @@
 # Changelog
 
+## 1.17.0 - 2026-09-22
+
+Plan 021 (`ha-automation-docs/plans/021-ha-docs-performance.md`).
+
+- Diagrams no longer hold up every page. The 3.5 MB Mermaid runtime was loaded
+  synchronously on all pages, ahead of the highlight and link-checker scripts;
+  it is now loaded asynchronously by `mermaid-init.js`, and only on a page that
+  has a diagram. Diagrams render one at a time as they come within a screen of
+  the viewport.
+- Fixed a palette-toggle race: a render that started in the old theme could
+  finish after the new one and overwrite it. Every render, including a failed
+  one, is now discarded if the palette has changed since it started.
+- The link-checker panel no longer sends overlapping status requests, and no
+  longer rebuilds its rows when nothing has changed, which had reset the
+  panel's scroll position every 3 s while it was open.
+- Site pages now carry `Cache-Control: no-cache`, so a browser revalidates
+  after a rebuild instead of guessing how long the previous build is fresh.
+  The security headers are repeated in that location, because nginx drops
+  inherited `add_header`s once a location sets its own.
+- Targeted Docs-link checks no longer overlap: one batch runs at a time, and
+  entities that change during it go in the next one. A steady stream of edits
+  can no longer postpone a check past 30 s.
+- Targeted checks and the refresh worker now share `/data/.checkout.lock`, so a
+  check never reads the docs checkout in the middle of `git reset --hard`, and
+  never raises a Repair while the orphan sweep is removing it.
+- Stopping the watcher now terminates a running targeted checker instead of
+  leaving it to run until the container stops.
+- CI: a Chromium + WebKit browser suite (`tests/browser/`) now gates
+  publishing, and the AppArmor smoke test checks `flock` and the response
+  headers inside the confined container.
+
 ## 1.16.4 - 2026-09-12
 
 - Fixed the site-header **Sync** button. The browser had been POSTing `{}`
