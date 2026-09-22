@@ -1,0 +1,8 @@
+# The add-on's own mkdocs.yml, pointed at a small fixture instead of /data/repo
+# and at the overrides in this checkout instead of /opt. Everything else -
+# extra_javascript order, the custom fence, the palette - is inherited, which is
+# the point: the browser suite exercises the real configuration.
+INHERIT: ../../mkdocs.yml
+docs_dir: fixture
+theme:
+  custom_dir: ../../overrides
