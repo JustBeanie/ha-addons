@@ -13,3 +13,6 @@ desktop.ini
 .DS_Store
 .idea/
 .vscode/
+
+# Browser test dependencies (ha_docs/tests/browser, npm ci in CI).
+node_modules/

@@ -106,12 +106,12 @@ markdown_extensions:
       pygments_lang_class: true
   - pymdownx.inlinehilite
 
-# Load order matters: the UMD bundle assigns globalThis.mermaid synchronously,
-# and the init script expects it to already exist.
 extra_javascript:
-  - assets/mermaid.min.js
+  # NOT assets/mermaid.min.js. The init script loads that 3.5 MB runtime itself,
+  # asynchronously and only on a page that has a diagram. Listing it here made
+  # every page - and every script below - wait for it (Plan 021).
   - assets/mermaid-init.js
-  # Highlights and notes. Independent of the two above - it only needs the DOM
+  # Highlights and notes. Independent of the one above - it only needs the DOM
   # and the annotation service nginx proxies at /anno/.
   - assets/annotate.js
   # Live status for both link checkers. Reads /anno/scan; mounts into

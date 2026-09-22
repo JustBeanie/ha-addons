@@ -1,0 +1,12 @@
+{
+  "name": "ha-docs-browser-tests",
+  "private": true,
+  "type": "module",
+  "description": "Chromium + WebKit behaviour tests for the HA Docs site scripts (Plan 021).",
+  "scripts": {
+    "test": "node --test --test-concurrency=1 run.mjs"
+  },
+  "devDependencies": {
+    "playwright": "1.63.0"
+  }
+}
