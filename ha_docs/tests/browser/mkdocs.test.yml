@@ -6,3 +6,6 @@ INHERIT: ../../mkdocs.yml
 docs_dir: fixture
 theme:
   custom_dir: ../../overrides
+hooks:
+  # Relative to this file, not to the inherited one.
+  - ../../asset_version.py

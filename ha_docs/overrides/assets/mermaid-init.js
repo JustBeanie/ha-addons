@@ -41,7 +41,10 @@
         }
       }
     }
-    return el ? el.src.replace(/mermaid-init\.js(\?.*)?$/, "mermaid.min.js") : null;
+    // Keeps this script's ?v= (asset_version.py). The digest covers the runtime
+    // too, so the versioned URL can be cached as immutable like every other
+    // asset instead of revalidating 3.5 MB on every page with a diagram.
+    return el ? el.src.replace(/mermaid-init\.js(\?.*)?$/, "mermaid.min.js$1") : null;
   })();
 
   function currentTheme() {

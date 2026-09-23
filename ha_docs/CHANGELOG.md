@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.17.1 - 2026-09-22
+
+- Fixed a flicker when changing pages, introduced in 1.17.0. That release sent
+  `Cache-Control: no-cache` on every file, so each page change revalidated
+  all thirteen stylesheets and scripts through ingress before it could paint,
+  and the page showed blank (white on the dark palette) for that round trip.
+  Site assets now have content-versioned URLs and are cached as `immutable`:
+  Material's are already hashed in the filename, and a new MkDocs hook
+  (`asset_version.py`) adds `?v=<digest>` to the add-on's own. The digest covers
+  every asset including the Mermaid runtime, which `mermaid-init.js` now loads
+  under the same version. Pages themselves stay `no-cache`, so a rebuild still
+  shows up on the next page change.
+- The browser suite now serves the annotation API itself instead of through
+  Playwright request interception, which silently disables the browser's HTTP
+  cache, and has a test that a page change refetches no stylesheet or script.
+
 ## 1.17.0 - 2026-09-22
 
 Plan 021 (`ha-automation-docs/plans/021-ha-docs-performance.md`).
