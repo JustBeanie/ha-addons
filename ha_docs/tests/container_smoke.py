@@ -46,6 +46,22 @@ for name in SECURITY:
     if not site.get(name):
         fail(f"site response lost {name} (add_header inheritance)")
 
+# Content-addressed assets are immutable, so a page change paints from cache
+# instead of revalidating every stylesheet through ingress (1.17.1). The files
+# need not exist: add_header ... always applies to the 404 too.
+IMMUTABLE = "public, max-age=31536000, immutable"
+for path, want in (
+    ("/assets/stylesheets/main.ec1eaa64.min.css", IMMUTABLE),
+    ("/assets/javascripts/bundle.d7400e89.min.js", IMMUTABLE),
+    ("/assets/annotate.css?v=0123456789ab", IMMUTABLE),
+    ("/assets/mermaid.min.js?v=0123456789ab", IMMUTABLE),
+    ("/assets/annotate.css", "no-cache"),
+    ("/docs/some-page.html", "no-cache"),
+):
+    got = headers(path).get("Cache-Control")
+    if got != want:
+        fail(f"{path} Cache-Control is {got!r}, want {want!r}")
+
 anno = headers("/anno/health")
 cache = anno.get_all("Cache-Control") or []
 if cache != ["no-store"]:

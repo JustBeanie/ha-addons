@@ -32,8 +32,50 @@ const TYPES = {
   ".xml": "application/xml"
 };
 
+// The same freshness rules as nginx.conf's $site_cache_control map, so the
+// browser caches here exactly as it does behind ingress.
+const IMMUTABLE = [
+  /^[^?]*\/assets\/(stylesheets|javascripts)\/[^?]*\.[0-9a-f]{8}\.min\.(css|js)$/,
+  /^[^?]*\/assets\/[^?]+\?v=[0-9a-f]+$/
+];
+
+function cacheControl(uri) {
+  return IMMUTABLE.some((re) => re.test(uri)) ? "public, max-age=31536000, immutable" : "no-cache";
+}
+
 let server;
 let origin;
+// Every request that actually reached the server, as a path after the prefix.
+const hits = [];
+// The annotation service, answered by this server rather than page.route():
+// Playwright disables the browser's HTTP cache on any page with a route, and
+// the page-change test is precisely about that cache.
+const anno = { delay: 0, stats: null };
+
+function annoReply(name, res) {
+  const json = (body) => {
+    res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" });
+    res.end(JSON.stringify(body));
+  };
+  if (name === "scan") {
+    const stats = anno.stats;
+    if (stats) {
+      stats.scan += 1;
+      stats.inflight += 1;
+      stats.maxInflight = Math.max(stats.maxInflight, stats.inflight);
+    }
+    setTimeout(() => {
+      if (stats) {
+        stats.inflight -= 1;
+      }
+      json(scanPayload());
+    }, anno.delay);
+  } else if (name === "all") {
+    json({ annotations: [] });
+  } else {
+    json({});
+  }
+}
 
 before(async () => {
   server = http.createServer((req, res) => {
@@ -43,12 +85,20 @@ before(async () => {
       return;
     }
     const rel = decodeURIComponent(url.pathname.slice(PREFIX.length)) || "index.html";
+    hits.push(rel + url.search);
+    if (rel.startsWith("anno/")) {
+      annoReply(rel.slice(5), res);
+      return;
+    }
     const file = path.join(SITE, rel);
     if (!file.startsWith(path.resolve(SITE)) || !fs.existsSync(file) || fs.statSync(file).isDirectory()) {
       res.writeHead(404).end();
       return;
     }
-    res.writeHead(200, { "Content-Type": TYPES[path.extname(file)] || "application/octet-stream" });
+    res.writeHead(200, {
+      "Content-Type": TYPES[path.extname(file)] || "application/octet-stream",
+      "Cache-Control": cacheControl("/" + rel + url.search)
+    });
     fs.createReadStream(file).pipe(res);
   });
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
@@ -74,33 +124,20 @@ function scanPayload() {
   };
 }
 
-// Opens a page with /anno/ mocked and every request recorded.
+// Opens a page with every request recorded; /anno/ is answered by the server.
 async function open(browser, page_, { width = 1280, height = 700, scanDelay = 0 } = {}) {
   const context = await browser.newContext({ viewport: { width, height } });
   const page = await context.newPage();
   const stats = { scan: 0, inflight: 0, maxInflight: 0, requests: [], errors: [] };
   page.on("request", (request) => stats.requests.push(request.url()));
   page.on("pageerror", (error) => stats.errors.push(String(error)));
-  await page.route("**/anno/**", async (route) => {
-    const name = new URL(route.request().url()).pathname.split("/anno/")[1];
-    if (name === "scan") {
-      stats.scan += 1;
-      stats.inflight += 1;
-      stats.maxInflight = Math.max(stats.maxInflight, stats.inflight);
-      await sleep(scanDelay);
-      stats.inflight -= 1;
-      await route.fulfill({ json: scanPayload() });
-    } else if (name === "all") {
-      await route.fulfill({ json: { annotations: [] } });
-    } else {
-      await route.fulfill({ json: {} });
-    }
-  });
+  anno.delay = scanDelay;
+  anno.stats = stats;
   await page.goto(origin + PREFIX + page_, { waitUntil: "domcontentloaded" });
   return { context, page, stats };
 }
 
-const runtimeRequests = (stats) => stats.requests.filter((u) => u.endsWith("/assets/mermaid.min.js"));
+const runtimeRequests = (stats) => stats.requests.filter((u) => /\/assets\/mermaid\.min\.js(\?|$)/.test(u));
 const offsite = (stats) => stats.requests.filter((u) => !u.startsWith(origin));
 
 // Runs in the page: true once every listed .diagram has finished.
@@ -134,6 +171,7 @@ for (const name of WANTED) {
         const runtime = runtimeRequests(stats);
         assert.equal(runtime.length, 1);
         assert.ok(runtime[0].startsWith(origin + PREFIX), runtime[0]);
+        assert.match(runtime[0], /\?v=[0-9a-f]+$/, "the runtime URL lost its version");
         assert.deepEqual(offsite(stats), []);
 
         const shapes = await page.$$eval(".diagram", (els) =>
@@ -190,6 +228,22 @@ for (const name of WANTED) {
           true
         );
         assert.deepEqual(stats.errors, []);
+        await context.close();
+      });
+
+      await t.test("changing pages paints from cache: no stylesheet or script refetched", async () => {
+        const { context, page } = await open(browser, "index.html");
+        await page.waitForLoadState("load");
+        await sleep(300);
+        hits.length = 0;
+        await page.goto(origin + PREFIX + "diagrams.html", { waitUntil: "load" });
+        await sleep(300);
+        // The page itself is revalidated (no-cache); nothing it links to in
+        // <head> may go back to the server, or every page change waits a
+        // round trip through ingress before it can paint.
+        const assets = hits.filter((h) => /\.(css|js)(\?|$)/.test(h) && !/mermaid\.min\.js/.test(h));
+        assert.deepEqual(assets, []);
+        assert.ok(hits.includes("diagrams.html"), JSON.stringify(hits));
         await context.close();
       });
 

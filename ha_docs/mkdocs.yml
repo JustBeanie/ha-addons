@@ -131,6 +131,12 @@ extra_css:
   - assets/panels.css
   - assets/tables.css
 
+# Appends ?v=<content digest> to every assets/ entry above, so nginx can let the
+# browser cache them as immutable. Without it each page change revalidated every
+# stylesheet through ingress before painting. See asset_version.py.
+hooks:
+  - asset_version.py
+
 plugins:
   - search:
       # The default separator is whitespace and hyphens, which makes
