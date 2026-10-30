@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.17.2 - 2026-10-22
+
+- Raised the floor on two transitive Python dependencies in the image.
+  `certifi` 2026.10.19 removes the emSign roots whose intermediate CA keys were
+  compromised (PYSEC-2026-4320), and `idna` 3.15 fixes CVE-2026-45409. The
+  1.17.1 image was built before either fix and still carried the old versions.
+
 ## 1.17.1 - 2026-09-22
 
 - Fixed a flicker when changing pages, introduced in 1.17.0. That release sent
