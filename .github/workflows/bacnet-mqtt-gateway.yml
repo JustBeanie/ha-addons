@@ -59,7 +59,7 @@ jobs:
           cp -a bacnet_mqtt_gateway .lint/bacnet_mqtt_gateway
           sed -i 's/type: app_config/type: addon_config/' .lint/bacnet_mqtt_gateway/config.yaml
       - name: Lint Home Assistant app manifest
-        uses: frenck/action-addon-linter@b9cfd1bc62ba60d2c4fc96317b5f7ada5923f4a7 # v2.21.1
+        uses: frenck/action-addon-linter@d51677290aef26cdfc835271dd3c7343ce502809 # v2.21.2
         with:
           path: ./.lint/bacnet_mqtt_gateway
 

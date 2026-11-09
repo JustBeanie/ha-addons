@@ -44,7 +44,7 @@ jobs:
           # The same pinned linter also predates the webui metadata key.
           sed -i '/^webui:/d' .lint/hyperion_ng/config.yaml
       - name: Lint Home Assistant app manifest
-        uses: frenck/action-addon-linter@v2.21.1
+        uses: frenck/action-addon-linter@v2.21.2
         with:
           path: ./.lint/hyperion_ng
       - name: Lint Dockerfile
