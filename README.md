@@ -43,52 +43,72 @@
 
 ---
 
-## BACnet MQTT Gateway
+## Available Apps
 
-Discover and poll BACnet/IP devices, publish their data to MQTT with Home Assistant discovery, and manage devices from an admin-only web console in the sidebar.
+### [BACnet MQTT Gateway](bacnet_mqtt_gateway/)
 
-- BACnet/IP network and object discovery, with configurable polling
-- Entities appear automatically through MQTT Discovery
+![Version](https://img.shields.io/badge/dynamic/yaml?url=https%3A%2F%2Fraw.githubusercontent.com%2FJustBeanie%2Fha-addons%2Fmain%2Fbacnet_mqtt_gateway%2Fconfig.yaml&query=%24.version&label=version&color=blue) ![aarch64](https://img.shields.io/badge/aarch64-supported-success) ![amd64](https://img.shields.io/badge/amd64-supported-success)
+
+Discover and poll BACnet/IP devices, publish their data to MQTT, and manage devices from a Home Assistant ingress console.
+
+Features:
+
+- BACnet/IP network and object discovery
+- Configurable polling with Home Assistant MQTT Discovery
 - Controlled BACnet property writes
-- Uses Home Assistant's own MQTT broker automatically, or any external broker (TLS supported)
-
-**Good to know:** needs host networking for BACnet broadcasts. Source code lives in [JustBeanie/bacnet-mqtt-gateway](https://github.com/JustBeanie/bacnet-mqtt-gateway).
+- Supervisor MQTT credentials or an external broker
 
 [Documentation](bacnet_mqtt_gateway/DOCS.md) · [Changelog](bacnet_mqtt_gateway/CHANGELOG.md)
 
-## HA Docs
+---
 
-Point it at a Git repository of Markdown files and get a searchable [MkDocs Material](https://squidfunk.github.io/mkdocs-material/) site in the Home Assistant sidebar, behind normal Home Assistant login.
+### [HA Docs](ha_docs/)
 
-- Pulls on an interval and rebuilds only when the repo changes
-- No `mkdocs.yml` needed — your repo stays exactly as GitHub renders it, heading links included
-- Can flag automations and scripts whose documentation links are broken
-- Works with private repos via a read-only token
+![Version](https://img.shields.io/badge/dynamic/yaml?url=https%3A%2F%2Fraw.githubusercontent.com%2FJustBeanie%2Fha-addons%2Fmain%2Fha_docs%2Fconfig.yaml&query=%24.version&label=version&color=blue) ![aarch64](https://img.shields.io/badge/aarch64-supported-success) ![amd64](https://img.shields.io/badge/amd64-supported-success)
+
+Turn a Git repository of Markdown files into a searchable MkDocs site in the Home Assistant sidebar.
+
+Features:
+
+- Pulls documentation from a repository and rebuilds when it changes
+- Preserves GitHub-style heading links
+- Can report broken documentation links in automations and scripts
+- Supports private repositories with a read-only token
 
 [Documentation](ha_docs/DOCS.md) · [Changelog](ha_docs/CHANGELOG.md)
 
-## Hyperion.NG
+---
 
-Runs the official [Hyperion.NG](https://github.com/hyperion-project/hyperion.ng) release for TV and monitor ambient lighting, with its web UI in the sidebar.
+### [Hyperion.NG](hyperion_ng/)
 
-- Configuration is stored in the app and included in Home Assistant backups
-- Native Hyperion ports (JSON, Proto, FlatBuffers) stay available to other clients
-- Serial, SPI, and video-capture device access
+![Version](https://img.shields.io/badge/dynamic/yaml?url=https%3A%2F%2Fraw.githubusercontent.com%2FJustBeanie%2Fha-addons%2Fmain%2Fhyperion_ng%2Fconfig.yaml&query=%24.version&label=version&color=blue) ![aarch64](https://img.shields.io/badge/aarch64-supported-success) ![amd64](https://img.shields.io/badge/amd64-supported-success)
+
+Run Hyperion.NG for ambient lighting, with its web interface available through Home Assistant ingress.
+
+Features:
+
+- Persistent configuration included in Home Assistant backups
+- Explicit ports for the web interface and Hyperion protocols
+- Serial, SPI, and video-capture device mappings
 
 [Documentation](hyperion_ng/DOCS.md) · [Changelog](hyperion_ng/CHANGELOG.md)
 
-## ToneWatch
+---
 
-Listens to an audio or SDR source for configured two-tone pages, records the call, and sends notifications through MQTT.
+### [ToneWatch](tonewatch/)
 
-- Web interface in the sidebar
-- Optional Home Assistant MQTT discovery
-- Recordings appear in the Home Assistant **Media** browser
-- Safe hot backups (the database is checkpointed first)
+![Version](https://img.shields.io/badge/dynamic/yaml?url=https%3A%2F%2Fraw.githubusercontent.com%2FJustBeanie%2Fha-addons%2Fmain%2Ftonewatch%2Fconfig.yaml&query=%24.version&label=version&color=blue) ![aarch64](https://img.shields.io/badge/aarch64-supported-success) ![amd64](https://img.shields.io/badge/amd64-supported-success) ![Experimental](https://img.shields.io/badge/stage-experimental-orange)
 
-> ⚠️ ToneWatch is a **supplemental** notification tool, not a certified primary alerting system. Don't rely on it as your only way to receive pages.
+Detect configured two-tone pages, record audio, and publish supplemental notifications through MQTT.
 
-Source code lives in [JustBeanie/tonewatch](https://github.com/JustBeanie/tonewatch).
+Features:
+
+- Home Assistant ingress interface and MQTT notifications
+- Optional Home Assistant MQTT service integration and discovery
+- Recordings available in the Home Assistant media browser
+- Hot backups with a database checkpoint
+
+ToneWatch is a supplemental notification tool, not a certified primary alerting system.
 
 [Documentation](tonewatch/DOCS.md) · [Changelog](tonewatch/CHANGELOG.md)
 
