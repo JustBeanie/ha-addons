@@ -9,6 +9,7 @@
 [![Commit activity](https://img.shields.io/github/commit-activity/m/JustBeanie/ha-addons?label=activity)](https://github.com/JustBeanie/ha-addons/commits/main/)
 [![Open issues](https://img.shields.io/github/issues/JustBeanie/ha-addons)](https://github.com/JustBeanie/ha-addons/issues)
 ![Architectures](https://img.shields.io/badge/arch-amd64%20%7C%20aarch64-success)
+[![License](https://img.shields.io/github/license/JustBeanie/ha-addons)](LICENSE)
 
 </div>
 
@@ -108,3 +109,7 @@ Source code lives in [JustBeanie/tonewatch](https://github.com/JustBeanie/tonewa
 - your app configuration, with **passwords, tokens, and broker credentials removed**
 
 Found a security problem? Please report it privately — see [SECURITY.md](SECURITY.md).
+
+## License
+
+[Apache License 2.0](LICENSE). Hyperion.NG itself is a separate project under its own [license](https://github.com/hyperion-project/hyperion.ng/blob/master/LICENSE).
