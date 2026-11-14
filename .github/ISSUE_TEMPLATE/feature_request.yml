@@ -1,0 +1,23 @@
+name: Feature request
+description: Suggest an improvement or a new option for one of the apps
+labels: ["enhancement"]
+body:
+  - type: dropdown
+    id: app
+    attributes:
+      label: App
+      options:
+        - BACnet MQTT Gateway
+        - HA Docs
+        - Hyperion.NG
+        - ToneWatch
+        - The repository itself
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would you like?
+      description: Describe the problem you're trying to solve, and how you'd like it to work.
+    validations:
+      required: true

@@ -1,0 +1,56 @@
+name: Bug report
+description: Something isn't working in one of the apps
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting! Please **remove passwords, tokens, and broker credentials** from anything you paste.
+  - type: dropdown
+    id: app
+    attributes:
+      label: App
+      options:
+        - BACnet MQTT Gateway
+        - HA Docs
+        - Hyperion.NG
+        - ToneWatch
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: App version
+      description: Shown on the app's Info tab.
+      placeholder: e.g. 1.17.2
+    validations:
+      required: true
+  - type: dropdown
+    id: arch
+    attributes:
+      label: Architecture
+      options:
+        - amd64
+        - aarch64
+        - Not sure
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What did you expect, and what happened instead? Steps to reproduce help a lot.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: App log
+      description: Copy the relevant lines from the app's Log tab.
+      render: text
+  - type: textarea
+    id: config
+    attributes:
+      label: App configuration
+      description: From the app's Configuration tab (⋮ → Edit in YAML), with secrets removed.
+      render: yaml
