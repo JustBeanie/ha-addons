@@ -1,6 +1,6 @@
 mkdocs==1.6.1
 mkdocs-material==9.8.0
-pymdown-extensions==12.3
+pymdown-extensions==13.1
 # Security floors for transitive dependencies (via requests). Without them the
 # image keeps whatever was current at its last build.
 certifi>=2026.10.23  # PYSEC-2026-4320: compromised emSign intermediates
