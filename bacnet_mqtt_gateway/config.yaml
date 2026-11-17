@@ -1,5 +1,5 @@
 name: "BACnet MQTT Gateway"
-version: "2.0.3"
+version: "2.0.4"
 slug: "bacnet_mqtt_gateway"
 description: >-
   Poll BACnet/IP devices, publish their data to MQTT, and expose a Home Assistant

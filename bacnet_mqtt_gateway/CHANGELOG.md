@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.0.4
+
+- Limit repeated requests for bundled console assets to reduce server load.
+
 ## 2.0.3
 
 - Improve BACnet discovery, polling, and property writes, including writes
