@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.6.2
+
+- Track ToneWatch 0.6.2. Network audio starts sooner, concurrent configuration
+  edits persist reliably, and live views share one WebSocket per tab.
+
 ## 0.6.1
 
 - Track app release 0.6.1: malformed requests now return a validation error
