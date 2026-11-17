@@ -1,5 +1,16 @@
 # Changelog
 
+## 2.0.3
+
+- Improve BACnet discovery, polling, and property writes, including writes
+  without an explicit priority.
+- Limit pending work during broker outages and report offline availability when
+  the gateway shuts down.
+- Save polling configurations atomically and ignore stale console responses
+  when switching devices.
+- Retain up to seven days and 100,000 rows of poll history. Latest device and
+  object state is stored separately.
+
 ## 2.0.2
 
 - Drop `startup`, `boot`, `panel_admin`, and `apparmor` from the manifest. Each
