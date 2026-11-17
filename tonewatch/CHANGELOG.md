@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.6.3
+
+- Track ToneWatch 0.6.3. CAD correlation searches only calls in the incident's
+  time window, and the web UI loads Leaflet and admin pages on demand.
+
 ## 0.6.2
 
 - Track ToneWatch 0.6.2. Network audio starts sooner, concurrent configuration
