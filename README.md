@@ -10,7 +10,7 @@
 [![Open issues](https://img.shields.io/github/issues/JustBeanie/ha-addons)](https://github.com/JustBeanie/ha-addons/issues)
 ![Architectures](https://img.shields.io/badge/arch-amd64%20%7C%20aarch64-success)
 [![License](https://img.shields.io/github/license/JustBeanie/ha-addons)](LICENSE)
-[![cortisol: low](.github/low-cortisol.svg)](CONTRIBUTING.md#using-ai-tools)
+[![cortisol: low](https://img.shields.io/badge/cortisol-low-6B8F71?style=flat&logo=data%3Aimage%2Fsvg%2Bxml%3Bbase64%2CPHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI%2BPHBhdGggZmlsbD0iI2ZmZiIgZD0iTTQgMjFjLS42LTYgMi4yLTExLjYgOS0xNC41IDMtMS4zIDUuOC0xLjYgNy0xLjUuNCA0LjgtMS4yIDkuNi01IDEyLjQtMi43IDItNiAyLjYtOC42IDIuMUw0IDIxem0yLjItMi4zYzIuNi0zLjggNi02LjcgMTAuMy04LjgtNC42IDEuMy04LjQgNC4zLTEwLjMgOC44eiIvPjwvc3ZnPg%3D%3D)](CHILL.md)
 
 </div>
 
