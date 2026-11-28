@@ -10,6 +10,7 @@
 [![Open issues](https://img.shields.io/github/issues/JustBeanie/ha-addons)](https://github.com/JustBeanie/ha-addons/issues)
 ![Architectures](https://img.shields.io/badge/arch-amd64%20%7C%20aarch64-success)
 [![License](https://img.shields.io/github/license/JustBeanie/ha-addons)](LICENSE)
+[![cortisol: low](.github/low-cortisol.svg)](CONTRIBUTING.md#using-ai-tools)
 
 </div>
 
