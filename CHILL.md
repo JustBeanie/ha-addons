@@ -22,7 +22,7 @@ A low-cortisol project removes friction wherever it can. It sets a few calm rule
 
 ### 1. Judge the work, not the workflow
 
-Review a contribution on whether it's correct, tested, readable, and wanted. How someone wrote it (editor, language server, autocomplete, AI assistant) is their business. The contributor is responsible for every line, however it was produced.
+Review a contribution on whether it's correct, tested, readable, and wanted. How someone wrote it (editor, language server, autocomplete, AI assistant) is their business. **The contributor is responsible for every line, however it was produced.**
 
 Welcoming AI doesn't mean anything goes. AI makes it cheap to produce a huge diff, and a huge diff nobody can review is pure stress. Chill projects set limits on the **contribution**, not the tool.
 
@@ -40,11 +40,15 @@ The README, issue tracker, release notes, and website exist to help people use a
 
 **In practice:** no banners, slogans, or causes in project spaces. No protestware, ever: code that acts on users based on who or where they are breaks the trust that free software depends on. Personal views stay personal, and nobody gets judged in the project for views they hold outside it.
 
-### 3. Be open about the money
+### 3. Be open about the money, and keep the state out of it
 
 Who pays for development shapes priorities. Say who funds the project, and on what terms, in one obvious place.
 
-**In practice:** a `FUNDING.md` or README section that names every grant, sponsor, and fiscal host, including government and state-backed funds, with any conditions attached. Funders never get a say over the roadmap, and you say so.
+**Government money isn't chill.** Grants from governments and state-backed bodies tie a project to public budgets and policy priorities it doesn't control. Low-cortisol projects don't take them.
+
+**Everything else is your call.** Donations, sponsors, fiscal hosts: taking money from anyone can be chill, and turning some sources down can be chill too, depending on the project and the reasons. There's no single right answer, so chill-foss labels funding as open, limited, or none found for information only.
+
+**In practice:** a `FUNDING.md` or README section that names every sponsor and fiscal host, with any conditions attached. No government or state-backed funding. Funders never get a say over the roadmap, and you say so.
 
 ### 4. A short Code of Conduct, enforced the same way for everyone
 
@@ -80,7 +84,7 @@ Unwritten rules cause the most stress, because nobody knows which ones apply unt
 
 ## Self-check
 
-Score one point for each line that's true. **11 or more is low cortisol.**
+Score one point for each line that's true. **12 or more is low cortisol.**
 
 - [ ] The contribution policy accepts AI-assisted work, with disclosure optional or lightly encouraged
 - [ ] Contributions are reviewed on quality, with no tool-based gatekeeping
@@ -89,6 +93,7 @@ Score one point for each line that's true. **11 or more is low cortisol.**
 - [ ] The project's site, README, and release notes carry no political or cause messaging
 - [ ] The project has never shipped protestware
 - [ ] Funding sources are listed in one public place
+- [ ] The project takes no government or state-backed funding
 - [ ] Funders have no control over the roadmap, and the docs say so
 - [ ] The Code of Conduct covers behavior in project spaces only, and it lists a real contact
 - [ ] Nobody is banned for their views or off-project activity, and doxxing or deplatforming campaigns aren't tolerated
